@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "351935273736",
+    "project_id": "collab-de419",
+    "storage_bucket": "collab-de419.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:351935273736:android:022c58ddaf0b3c78066abd",
+        "android_client_info": {
+          "package_name": "com.example.collab"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCE-vmWGIx2hqI3GazImJoRW9q-5FtzJW4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
