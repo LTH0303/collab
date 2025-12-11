@@ -25,15 +25,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -70,6 +64,24 @@ class DefaultFirebaseOptions {
     projectId: 'collab-de419',
     storageBucket: 'collab-de419.firebasestorage.app',
     iosBundleId: 'com.example.collab',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyBbm9-zIofNjgaKEZccbFc9DyyxvZluYQ8',
+    appId: '1:351935273736:ios:4f10ab438a4227d0066abd',
+    messagingSenderId: '351935273736',
+    projectId: 'collab-de419',
+    storageBucket: 'collab-de419.firebasestorage.app',
+    iosBundleId: 'com.example.collab',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyCBYd5lheuZXvHxwz05mkw1rQUgXTYWojw',
+    appId: '1:351935273736:web:b2a7f45d5d809a37066abd',
+    messagingSenderId: '351935273736',
+    projectId: 'collab-de419',
+    authDomain: 'collab-de419.firebaseapp.com',
+    storageBucket: 'collab-de419.firebasestorage.app',
   );
 
 }
