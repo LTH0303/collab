@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Added for logout
+import '../Authentication/login_page.dart'; // Added for navigation
 import '../../ViewModel/PlannerViewModel/planner_view_model.dart';
 import '../../ViewModel/JobViewModule/job_view_model.dart';
 import '../../models/project_model.dart';
@@ -39,9 +41,7 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // ---------------------------------------------------------
-          // UPDATED: Link Profile Icon to the new Profile Page
-          // ---------------------------------------------------------
+          // Link Profile Icon to the Profile Page
           IconButton(
             icon: const Icon(Icons.person_outline, color: Colors.black),
             onPressed: () {
@@ -87,7 +87,7 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
   }
 }
 
-// --- 2. AI Planner (输入资源) ---
+// --- 2. AI Planner ---
 class AIPlannerSection extends StatefulWidget {
   final VoidCallback onGenerateSuccess;
   const AIPlannerSection({super.key, required this.onGenerateSuccess});
@@ -398,19 +398,9 @@ class ActiveProjectsView extends StatelessWidget {
       ),
     );
   }
-
-  Widget _iconText(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: Colors.grey[500]),
-        const SizedBox(width: 4),
-        Text(text, style: TextStyle(color: Colors.grey[700], fontSize: 12, fontWeight: FontWeight.w500)),
-      ],
-    );
-  }
 }
 
-// --- 5. Draft View (移除验证方式) ---
+// --- 5. Draft View ---
 class DraftView extends StatefulWidget {
   final VoidCallback onPublish;
   const DraftView({super.key, required this.onPublish});
@@ -587,7 +577,7 @@ class _DraftViewState extends State<DraftView> {
   }
 }
 
-// --- 6. Edit Project Screen (移除 Verification Type 下拉框) ---
+// --- 6. Edit Project Screen ---
 class EditProjectScreen extends StatefulWidget {
   final int draftIndex;
   const EditProjectScreen({super.key, required this.draftIndex});
@@ -624,7 +614,6 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
     final phaseController = TextEditingController(text: m?.phaseName ?? "");
     final taskController = TextEditingController(text: m?.taskName ?? "");
     final incentiveController = TextEditingController(text: m?.incentive ?? "");
-    // 移除 Verification type 的变量
 
     showDialog(
       context: context,
@@ -637,7 +626,6 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
               TextField(controller: phaseController, decoration: const InputDecoration(labelText: "Phase (e.g. Phase 1)")),
               TextField(controller: taskController, decoration: const InputDecoration(labelText: "Task Name")),
               TextField(controller: incentiveController, decoration: const InputDecoration(labelText: "Incentive (e.g. Seeds)")),
-              // ⚠️ 移除 Verification Type Dropdown
             ],
           ),
         ),
@@ -649,7 +637,7 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
                 phaseName: phaseController.text,
                 taskName: taskController.text,
                 incentive: incentiveController.text,
-                verificationType: 'leader', // 默认值
+                verificationType: 'leader',
               );
 
               setState(() {
@@ -784,7 +772,7 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// NEW CLASS: LeaderProfilePage (Based on Figma image_bbd323.png)
+// NEW CLASS: LeaderProfilePage
 // ---------------------------------------------------------------------------
 class LeaderProfilePage extends StatelessWidget {
   const LeaderProfilePage({super.key});
@@ -792,7 +780,7 @@ class LeaderProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F9), // Light grayish-blue background
+      backgroundColor: const Color(0xFFF5F7F9),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -804,6 +792,23 @@ class LeaderProfilePage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.edit_outlined, color: Colors.black),
             onPressed: () {},
+          ),
+          // -----------------------------------------------------------
+          // UPDATED: Added Logout Button Logic here
+          // -----------------------------------------------------------
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
+            tooltip: "Logout",
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                // Navigate back to Login Page and clear the navigation stack
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
+                      (route) => false,
+                );
+              }
+            },
           ),
         ],
       ),
@@ -831,7 +836,7 @@ class LeaderProfilePage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFC8E6C9), // Light Green pill
+                color: const Color(0xFFC8E6C9),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
