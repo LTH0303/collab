@@ -1,12 +1,9 @@
-// lib/views/leader_main_layout.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/PlannerViewModel/planner_view_model.dart';
 import '../../ViewModel/JobViewModule/job_view_model.dart';
 import '../../models/project_model.dart';
 
-// --- 1. 主框架 ---
 class LeaderMainLayout extends StatefulWidget {
   const LeaderMainLayout({super.key});
 
@@ -30,7 +27,7 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // 浅灰背景
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,16 +47,16 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
             color: Colors.white,
             child: TabBar(
               controller: _mainTabController,
-              labelColor: const Color(0xFF2E7D32), // 深绿色
+              labelColor: const Color(0xFF2E7D32),
               unselectedLabelColor: Colors.grey,
               indicatorColor: const Color(0xFF2E7D32),
-              isScrollable: false, // 固定Tab
+              isScrollable: false,
               labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               tabs: const [
-                Tab(icon: Icon(Icons.smart_toy_outlined, size: 20), text: "AI Planner"),
-                Tab(icon: Icon(Icons.assignment_outlined, size: 20), text: "Projects"),
-                Tab(icon: Icon(Icons.bar_chart_outlined, size: 20), text: "Impact"),
-                Tab(icon: Icon(Icons.groups_outlined, size: 20), text: "Community"),
+                Tab(icon: Icon(Icons.smart_toy_outlined), text: "AI Planner"),
+                Tab(icon: Icon(Icons.assignment_outlined), text: "Projects"),
+                Tab(icon: Icon(Icons.bar_chart_outlined), text: "Impact"),
+                Tab(icon: Icon(Icons.groups_outlined), text: "Community"),
               ],
             ),
           ),
@@ -79,7 +76,7 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
   }
 }
 
-// --- 2. AI Planner Section ---
+// --- 2. AI Planner (输入资源) ---
 class AIPlannerSection extends StatefulWidget {
   final VoidCallback onGenerateSuccess;
   const AIPlannerSection({super.key, required this.onGenerateSuccess});
@@ -117,9 +114,9 @@ class _AIPlannerSectionState extends State<AIPlannerSection> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
-                      Text("AI Resource Planner", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text("Smart Resource Planner", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                       SizedBox(height: 5),
-                      Text("Input available resources to generate project proposals.", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text("Input your idle resources. AI will recommend a sustainable project.", style: TextStyle(color: Colors.white70, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -128,23 +125,21 @@ class _AIPlannerSectionState extends State<AIPlannerSection> {
           ),
           const SizedBox(height: 25),
 
-          const Text("Quick Select Resources:", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
+          const Text("What resources are available?", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _quickInputChip("Empty Warehouse"),
-            _quickInputChip("2 Acres Land"),
-            _quickInputChip("Old Computers"),
-            _quickInputChip("Community Hall"),
+            _quickInputChip("2 acres river land"),
+            _quickInputChip("Surplus Corn Seeds"),
+            _quickInputChip("Old Community Hall"),
+            _quickInputChip("Bamboo grove"),
           ]),
 
-          const SizedBox(height: 25),
-          const Text("Describe your resources:", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
           TextField(
             controller: _controller,
             maxLines: 4,
             decoration: InputDecoration(
-              hintText: "E.g., We have an abandoned shed near the river and some leftover timber...",
+              hintText: "E.g., I have 50kg of leftover fertilizer and a small plot of land near the school...",
               hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               filled: true,
@@ -161,7 +156,7 @@ class _AIPlannerSectionState extends State<AIPlannerSection> {
               icon: viewModel.isLoading
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : const Icon(Icons.lightbulb_outline),
-              label: Text(viewModel.isLoading ? "Generating..." : "Generate Proposal"),
+              label: Text(viewModel.isLoading ? "Analyzing Resources..." : "Get AI Recommendation"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2E7D32),
                 foregroundColor: Colors.white,
@@ -173,14 +168,13 @@ class _AIPlannerSectionState extends State<AIPlannerSection> {
                 await viewModel.generatePlan(_controller.text);
                 if (viewModel.drafts.isNotEmpty) {
                   widget.onGenerateSuccess();
-                  // 清空输入框以便下次输入
                   _controller.clear();
                 }
               },
             ),
           ),
           if (viewModel.error != null)
-            Padding(padding: const EdgeInsets.only(top: 10), child: Text(viewModel.error!, style: const TextStyle(color: Colors.red))),
+            Padding(padding: const EdgeInsets.only(top: 10), child: Text("Error: ${viewModel.error}", style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -218,7 +212,6 @@ class _ProjectsSectionState extends State<ProjectsSection> with TickerProviderSt
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // 顶部子导航栏 (Draft / Active / Completed)
         Container(
           color: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -240,13 +233,10 @@ class _ProjectsSectionState extends State<ProjectsSection> with TickerProviderSt
           child: TabBarView(
             controller: _subTabController,
             children: [
-              // Draft Tab
               DraftView(onPublish: () {
-                _subTabController.animateTo(1); // 发布成功后跳转 Active
+                _subTabController.animateTo(1);
               }),
-              // Active Tab
               const ActiveProjectsView(),
-              // Completed Tab
               const Center(child: Text("No completed projects.")),
             ],
           ),
@@ -256,7 +246,7 @@ class _ProjectsSectionState extends State<ProjectsSection> with TickerProviderSt
   }
 }
 
-// --- 4. Active Projects View (复刻你的 UI) ---
+// --- 4. Active Projects View ---
 class ActiveProjectsView extends StatelessWidget {
   const ActiveProjectsView({super.key});
 
@@ -279,7 +269,7 @@ class ActiveProjectsView extends StatelessWidget {
               children: [
                 Icon(Icons.assignment_outlined, size: 64, color: Colors.grey[300]),
                 const SizedBox(height: 16),
-                const Text("No active projects", style: TextStyle(color: Colors.grey)),
+                const Text("No active projects running.", style: TextStyle(color: Colors.grey)),
               ],
             ),
           );
@@ -296,129 +286,103 @@ class ActiveProjectsView extends StatelessWidget {
     );
   }
 
-  // 🔥 关键：根据你的截图设计的卡片样式
   Widget _buildActiveProjectCard(BuildContext context, Project project) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        // 轻微阴影
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. 顶部绿色横条 (包含标题和状态)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
-              color: Color(0xFF2E7D32), // 顶部深绿色
+              gradient: LinearGradient(
+                colors: [Color(0xFF66BB6A), Color(0xFF2E7D32)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    project.title,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(4)),
+                      child: const Text("Active", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                    const Icon(Icons.edit, color: Colors.white, size: 18),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text("Active", style: TextStyle(color: Colors.white, fontSize: 10)),
-                )
+                const SizedBox(height: 12),
+                Text(
+                  project.title,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  project.participantRange,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
               ],
             ),
           ),
-
-          // 2. 内容区域
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 描述
-                Text(
-                  project.description,
-                  style: TextStyle(color: Colors.grey[700], fontSize: 13, height: 1.4),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 16),
-
-                // 信息行 (Timeline, Participants)
                 Row(
-                  children: [
-                    _iconText(Icons.calendar_today_outlined, project.timeline),
-                    const SizedBox(width: 20),
-                    _iconText(Icons.people_outline, project.participantRange),
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: const [
+                    Text("Overall Progress", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text("0%", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ],
                 ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: 0.0,
+                    backgroundColor: Colors.green.withOpacity(0.1),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2E7D32)),
+                    minHeight: 8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text("${project.milestones.length} Milestones", style: const TextStyle(color: Colors.grey, fontSize: 11)),
                 const SizedBox(height: 16),
-
-                // 进度条 (模拟进度)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text("Progress", style: TextStyle(color: Colors.grey[600], fontSize: 11, fontWeight: FontWeight.bold)),
-                        Text("0%", style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: 0.0, // 初始进度为 0
-                        backgroundColor: Colors.grey[200],
-                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2E7D32)),
-                        minHeight: 6,
-                      ),
-                    ),
-                  ],
+                const Text("Timeline", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(project.timeline, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                const Text("Provided Resources:", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(
+                  "Initial materials supplied by Leader.",
+                  style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
                 ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () {},
+                    child: const Text("View Project Details", style: TextStyle(color: Colors.white)),
+                  ),
+                )
               ],
             ),
           ),
-
-          // 3. 底部操作栏
-          Container(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.grey.shade100)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.visibility_outlined, size: 16, color: Colors.grey),
-                    label: const Text("View Details", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    onPressed: () {},
-                  ),
-                ),
-                Container(width: 1, height: 24, color: Colors.grey.shade200),
-                Expanded(
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF2E7D32)),
-                    label: const Text("Manage", style: TextStyle(color: Color(0xFF2E7D32), fontSize: 12)),
-                    onPressed: () {
-                      // 这里可以跳转到管理页面
-                    },
-                  ),
-                ),
-              ],
-            ),
-          )
         ],
       ),
     );
@@ -435,7 +399,7 @@ class ActiveProjectsView extends StatelessWidget {
   }
 }
 
-// --- 5. Draft View (支持多 Draft 滑动浏览) ---
+// --- 5. Draft View (移除验证方式) ---
 class DraftView extends StatefulWidget {
   final VoidCallback onPublish;
   const DraftView({super.key, required this.onPublish});
@@ -450,10 +414,9 @@ class _DraftViewState extends State<DraftView> {
   @override
   Widget build(BuildContext context) {
     final viewModel = Provider.of<PlannerViewModel>(context);
-    final drafts = viewModel.drafts; // 获取所有草稿
+    final drafts = viewModel.drafts;
 
     if (viewModel.isLoading) return const Center(child: CircularProgressIndicator());
-
     if (drafts.isEmpty) {
       return Center(
         child: Column(
@@ -461,15 +424,8 @@ class _DraftViewState extends State<DraftView> {
           children: [
             Icon(Icons.post_add, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            const Text("No drafts yet", style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const Text("No recommendations yet", style: TextStyle(fontSize: 16, color: Colors.grey)),
             const SizedBox(height: 8),
-            TextButton(
-              child: const Text("Go to AI Planner"),
-              onPressed: () {
-                // 找到父级 TabController 切换到第一个 tab (比较hacky，建议通过callback)
-                DefaultTabController.of(context)?.animateTo(0);
-              },
-            )
           ],
         ),
       );
@@ -480,15 +436,13 @@ class _DraftViewState extends State<DraftView> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-          child: Text("You have ${drafts.length} draft proposal(s)", style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          child: Text("AI Recommendation (${drafts.length})", style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
         ),
         Expanded(
-          // 使用 PageView 实现横向滚动浏览多个 Draft
           child: PageView.builder(
             controller: _pageController,
             itemCount: drafts.length,
             itemBuilder: (context, index) {
-              // 倒序显示，让最新的 Draft 显示在最前面（或者你可以根据需求调整 list 顺序）
               final draft = drafts[drafts.length - 1 - index];
               return _buildDraftCard(context, viewModel, draft, drafts.length - 1 - index);
             },
@@ -511,11 +465,10 @@ class _DraftViewState extends State<DraftView> {
       ),
       child: Column(
         children: [
-          // 卡片头部
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
-              color: Color(0xFFE8F5E9), // 浅绿色背景
+              color: Color(0xFFE8F5E9),
               borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
             ),
             child: Row(
@@ -523,48 +476,45 @@ class _DraftViewState extends State<DraftView> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: const Color(0xFF2E7D32), borderRadius: BorderRadius.circular(4)),
-                  child: const Text("AI Draft", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  child: const Text("Recommendation", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                  onPressed: () {
-                    viewModel.removeDraft(index);
-                  },
+                  onPressed: () => viewModel.removeDraft(index),
                 )
               ],
             ),
           ),
 
-          // 卡片内容 (可滚动)
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(draft.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  Text(draft.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
                   const SizedBox(height: 10),
                   Text(draft.description, style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.5)),
 
                   const SizedBox(height: 20),
                   const Divider(),
-                  const SizedBox(height: 10),
 
                   _infoRow("Timeline", draft.timeline, Icons.calendar_today),
                   const SizedBox(height: 10),
-                  _infoRow("Participants", draft.participantRange, Icons.people_outline),
+                  _infoRow("Target Youth", draft.participantRange, Icons.people_outline),
 
                   const SizedBox(height: 20),
-                  const Text("Milestones", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const Text("Proposed Milestones & Rewards", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 10),
                   ...draft.milestones.map((m) => Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.check_circle_outline, size: 16, color: Colors.green),
+                        const Icon(Icons.star_outline, size: 16, color: Colors.orange),
                         const SizedBox(width: 8),
-                        Expanded(child: Text("${m.phaseName}: ${m.taskName}", style: const TextStyle(fontSize: 12))),
+                        Expanded(child: Text("${m.phaseName}: ${m.taskName}\nReward: ${m.incentive}", style: const TextStyle(fontSize: 12))),
                       ],
                     ),
                   )),
@@ -573,7 +523,6 @@ class _DraftViewState extends State<DraftView> {
             ),
           ),
 
-          // 底部按钮区
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -581,17 +530,14 @@ class _DraftViewState extends State<DraftView> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => EditProjectScreen(draftIndex: index))
-                      );
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => EditProjectScreen(draftIndex: index)));
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.black,
                       side: BorderSide(color: Colors.grey.shade300),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text("Edit"),
+                    child: const Text("Edit Plan"),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -607,7 +553,7 @@ class _DraftViewState extends State<DraftView> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       elevation: 0,
                     ),
-                    child: const Text("Publish"),
+                    child: const Text("Approve & Publish"),
                   ),
                 ),
               ],
@@ -630,13 +576,13 @@ class _DraftViewState extends State<DraftView> {
   }
 }
 
-// --- 6. Edit Project Screen ---
+// --- 6. Edit Project Screen (移除 Verification Type 下拉框) ---
 class EditProjectScreen extends StatefulWidget {
-  final int draftIndex; // 传入要编辑的 Draft 索引
+  final int draftIndex;
   const EditProjectScreen({super.key, required this.draftIndex});
 
   @override
-  _EditProjectScreenState createState() => _EditProjectScreenState();
+  State<EditProjectScreen> createState() => _EditProjectScreenState();
 }
 
 class _EditProjectScreenState extends State<EditProjectScreen> {
@@ -650,7 +596,6 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
   @override
   void initState() {
     super.initState();
-    // 获取指定索引的 Draft
     final draft = Provider.of<PlannerViewModel>(context, listen: false).drafts[widget.draftIndex];
 
     _titleController = TextEditingController(text: draft.title);
@@ -668,7 +613,7 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
     final phaseController = TextEditingController(text: m?.phaseName ?? "");
     final taskController = TextEditingController(text: m?.taskName ?? "");
     final incentiveController = TextEditingController(text: m?.incentive ?? "");
-    String verificationType = m?.verificationType ?? "leader";
+    // 移除 Verification type 的变量
 
     showDialog(
       context: context,
@@ -678,19 +623,10 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: phaseController, decoration: const InputDecoration(labelText: "Phase (e.g. Day 1)")),
+              TextField(controller: phaseController, decoration: const InputDecoration(labelText: "Phase (e.g. Phase 1)")),
               TextField(controller: taskController, decoration: const InputDecoration(labelText: "Task Name")),
-              TextField(controller: incentiveController, decoration: const InputDecoration(labelText: "Incentive (e.g. 50 Points)")),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: verificationType,
-                decoration: const InputDecoration(labelText: "Verification Type"),
-                items: const [
-                  DropdownMenuItem(value: "leader", child: Text("Leader Confirmation")),
-                  DropdownMenuItem(value: "photo", child: Text("Photo Evidence")),
-                ],
-                onChanged: (val) => verificationType = val!,
-              ),
+              TextField(controller: incentiveController, decoration: const InputDecoration(labelText: "Incentive (e.g. Seeds)")),
+              // ⚠️ 移除 Verification Type Dropdown
             ],
           ),
         ),
@@ -702,7 +638,7 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
                 phaseName: phaseController.text,
                 taskName: taskController.text,
                 incentive: incentiveController.text,
-                verificationType: verificationType,
+                verificationType: 'leader', // 默认值
               );
 
               setState(() {
@@ -749,7 +685,7 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Milestones", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text("Milestones & Incentives", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 TextButton.icon(
                   icon: const Icon(Icons.add_circle_outline, size: 18),
                   label: const Text("Add"),
@@ -766,9 +702,9 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
               Milestone m = entry.value;
               return ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.flag_outlined, color: Colors.green),
+                leading: const Icon(Icons.emoji_events_outlined, color: Colors.orange),
                 title: Text(m.taskName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text("${m.phaseName} • ${m.incentive}"),
+                subtitle: Text("Reward: ${m.incentive}"),
                 trailing: IconButton(
                   icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
                   onPressed: () => _showMilestoneDialog(index: idx),
@@ -795,7 +731,6 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 15),
                     ),
                     onPressed: () {
-                      // 更新 ViewModel 中的指定 Draft
                       viewModel.updateDraft(
                         widget.draftIndex,
                         title: _titleController.text,
