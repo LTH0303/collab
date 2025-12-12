@@ -6,9 +6,10 @@ import 'package:provider/provider.dart';
 import 'models/AIService/ai_service.dart';
 import 'models/DatabaseService/database_service.dart';
 import 'models/ProjectRepository/project_repository.dart';
-
+import 'ViewModel/AuthViewModel/auth_view_model.dart';
 import 'ViewModel/PlannerViewModel/planner_view_model.dart';
 import 'ViewModel/JobViewModule/job_view_model.dart';
+import 'View/Authentication/login_page.dart';
 
 // Views
 import 'View/LeaderUserInterface/leader_main_layout.dart'; // Keep this if referenced elsewhere
@@ -36,7 +37,7 @@ void main() async {
       providers: [
         // Inject Village Leader ViewModel
         ChangeNotifierProvider(create: (_) => PlannerViewModel(projectRepo)),
-
+        ChangeNotifierProvider(create: (_) => AuthViewModel()),
         // Inject Youth Participant/JobBoard ViewModel
         ChangeNotifierProvider(create: (_) => JobViewModel(dbService)),
       ],
