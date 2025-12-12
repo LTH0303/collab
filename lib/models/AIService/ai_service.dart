@@ -9,7 +9,7 @@ class AIService {
 
   AIService() {
     // ⚠️ 记得换成你的真实 Key
-    const apiKey = 'AIzaSyA7S-HCq7hwe1hZVc9czbVr3GAdXAXvOic';
+    const apiKey = 'AIzaSyCmgtHGJ6RRfzSGbAMU2vu0n5HXNowr2ek';
 
     _model = GenerativeModel(
       model: 'gemini-2.5-flash',

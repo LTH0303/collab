@@ -39,7 +39,18 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(icon: const Icon(Icons.person_outline, color: Colors.black), onPressed: () {}),
+          // ---------------------------------------------------------
+          // UPDATED: Link Profile Icon to the new Profile Page
+          // ---------------------------------------------------------
+          IconButton(
+            icon: const Icon(Icons.person_outline, color: Colors.black),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LeaderProfilePage()),
+              );
+            },
+          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
@@ -768,6 +779,178 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// NEW CLASS: LeaderProfilePage (Based on Figma image_bbd323.png)
+// ---------------------------------------------------------------------------
+class LeaderProfilePage extends StatelessWidget {
+  const LeaderProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7F9), // Light grayish-blue background
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, color: Colors.black),
+            onPressed: () {},
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            // --- Profile Header ---
+            const CircleAvatar(
+              radius: 40,
+              backgroundColor: Color(0xFF2E7D32), // Dark Green
+              child: Icon(Icons.person, size: 40, color: Colors.white),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              "Dato' Seri Ahmad",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              "Village Leader",
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC8E6C9), // Light Green pill
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                "Kampung Baru",
+                style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // --- Stats Row ---
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildStatCard("12", "Active\nProject", Icons.assignment_outlined, const Color(0xFFC8E6C9), const Color(0xFF2E7D32)),
+                _buildStatCard("47", "Completed", Icons.check_circle_outline, const Color(0xFFE3F2FD), const Color(0xFF1E88E5)),
+                _buildStatCard("156", "Youth Hired", Icons.people_outline, const Color(0xFFFFF3E0), const Color(0xFFFF9800)),
+              ],
+            ),
+
+            const SizedBox(height: 32),
+
+            // --- Contact Information ---
+            _buildSectionHeader("Contact Information"),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+                ],
+              ),
+              child: Column(
+                children: [
+                  _buildInfoTile(Icons.email_outlined, "Email", "ahmad.leader@gmail.com"),
+                  const Divider(height: 1, indent: 60),
+                  _buildInfoTile(Icons.phone_outlined, "Phone", "+60 12-345 6789"),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // --- Village Information ---
+            _buildSectionHeader("Village Information"),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+                ],
+              ),
+              child: Column(
+                children: [
+                  _buildInfoTile(Icons.location_on_outlined, "Village", "Kampung Baru"),
+                  const Divider(height: 1, indent: 60),
+                  _buildInfoTile(Icons.groups_outlined, "Population", "1250 Resident"),
+                  const Divider(height: 1, indent: 60),
+                  _buildInfoTile(Icons.access_time, "Year in Office", "8 Year"),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String count, String label, IconData icon, Color bg, Color iconColor) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(height: 12),
+            Text(count, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+      ),
+    );
+  }
+
+  Widget _buildInfoTile(IconData icon, String title, String subtitle) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, color: Colors.grey[600], size: 20),
+      ),
+      title: Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)),
     );
   }
 }
