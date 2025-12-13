@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../Authentication/login_page.dart';
-// Import the Job Board created in the previous step
-import 'participant_job_list_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import for Logout
+import '../Authentication/login_page.dart'; // Import for Navigation
+import 'participant_job_list_screen.dart'; // Job Board
 
 class ParticipantMainLayout extends StatefulWidget {
   const ParticipantMainLayout({super.key});
@@ -35,7 +34,7 @@ class _ParticipantMainLayoutState extends State<ParticipantMainLayout> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // We remove the AppBar here so each child page can have its own specific AppBar (like in the Figma designs)
+      // We remove the AppBar here so each child page can have its own specific AppBar
       body: _children[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         onTap: _onTabTapped,
@@ -63,7 +62,7 @@ class _ParticipantMainLayoutState extends State<ParticipantMainLayout> {
 }
 
 // ---------------------------------------------------------------------------
-// NEW CLASS: ParticipantProfilePage (Based on Figma image_b98d85.png)
+// NEW CLASS: ParticipantProfilePage (With Logout Button)
 // ---------------------------------------------------------------------------
 class ParticipantProfilePage extends StatelessWidget {
   const ParticipantProfilePage({super.key});
@@ -79,21 +78,26 @@ class ParticipantProfilePage extends StatelessWidget {
         centerTitle: true,
         automaticallyImplyLeading: false, // Hidden back arrow for Tab view
         actions: [
-          // Logout Button (Placed here for convenience)
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.redAccent),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const LoginPage()),
-                );
-              }
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.edit_outlined, color: Colors.black),
             onPressed: () {}, // Edit profile logic
+          ),
+          // -----------------------------------------------------------
+          // UPDATED: Added Logout Button Logic here
+          // -----------------------------------------------------------
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
+            tooltip: "Logout",
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                // Navigate back to Login Page and clear the navigation stack
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
+                      (route) => false,
+                );
+              }
+            },
           ),
         ],
       ),
@@ -132,7 +136,7 @@ class ParticipantProfilePage extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF8E1), // Light Yellow bg
+                      color: const Color(0xFFFFF8E1), // Light Yellow pill
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
