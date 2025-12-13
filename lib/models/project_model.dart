@@ -4,13 +4,15 @@ class Project {
   String? id;
   String title;
   String description;
-  String timeline;       // e.g. "3-4 Months"
-  List<String> skills;   // e.g. ["Agriculture", "Construction"]
-  String participantRange; // e.g. "5-8 participants"
+  String timeline;
+  List<String> skills;
+  String participantRange;
   List<Milestone> milestones;
-  String status;         // 'draft' or 'active'
-  List<String> startingResources; // New: 起始物资
-  String address;        // New: 项目地址
+  String status;
+  List<String> startingResources;
+  String address;
+  String totalBudget;
+  String? leaderId; // Added
 
   Project({
     this.id,
@@ -23,9 +25,10 @@ class Project {
     this.status = 'draft',
     this.startingResources = const [],
     this.address = '',
+    this.totalBudget = '0',
+    this.leaderId,
   });
 
-  // 从 AI 生成的 JSON 或 Firebase 数据转换
   factory Project.fromJson(Map<String, dynamic> json, {String? docId}) {
     return Project(
       id: docId,
@@ -37,13 +40,14 @@ class Project {
       status: json['status'] ?? 'draft',
       startingResources: List<String>.from(json['starting_resources'] ?? []),
       address: json['address'] ?? '',
+      totalBudget: json['total_budget']?.toString() ?? '0',
+      leaderId: json['leader_id'],
       milestones: (json['milestones'] as List? ?? [])
           .map((m) => Milestone.fromJson(m))
           .toList(),
     );
   }
 
-  // 转换为 JSON 上传 Firebase
   Map<String, dynamic> toJson() {
     return {
       'project_title': title,
@@ -54,6 +58,8 @@ class Project {
       'status': status,
       'starting_resources': startingResources,
       'address': address,
+      'total_budget': totalBudget,
+      'leader_id': leaderId,
       'milestones': milestones.map((m) => m.toJson()).toList(),
       'created_at': DateTime.now().toIso8601String(),
     };
@@ -61,11 +67,14 @@ class Project {
 }
 
 class Milestone {
-  String phaseName;      // UI: "Day 1" or "Week 2"
-  String taskName;       // UI: "Land Clearing"
-  String verificationType; // "photo" (需要拍照) 或 "leader" (村长确认)
-  String incentive;      // UI: "Incentive" (回报/奖励)
-  String description;    // New: 任务详情描述
+  String phaseName;
+  String taskName;
+  String verificationType;
+  String incentive;
+  String description;
+  String allocatedBudget;
+  String expenseClaimed;
+  bool isCompleted;
 
   Milestone({
     required this.phaseName,
@@ -73,6 +82,9 @@ class Milestone {
     required this.verificationType,
     required this.incentive,
     this.description = '',
+    this.allocatedBudget = '0',
+    this.expenseClaimed = '0',
+    this.isCompleted = false,
   });
 
   factory Milestone.fromJson(Map<String, dynamic> json) {
@@ -82,6 +94,9 @@ class Milestone {
       verificationType: json['verification_type'] ?? 'leader',
       incentive: json['incentive'] ?? '',
       description: json['description'] ?? 'Perform the task according to village guidelines.',
+      allocatedBudget: json['allocated_budget']?.toString() ?? '0',
+      expenseClaimed: json['expense_claimed']?.toString() ?? '0',
+      isCompleted: json['is_completed'] ?? false,
     );
   }
 
@@ -91,5 +106,8 @@ class Milestone {
     'verification_type': verificationType,
     'incentive': incentive,
     'description': description,
+    'allocated_budget': allocatedBudget,
+    'expense_claimed': expenseClaimed,
+    'is_completed': isCompleted,
   };
 }

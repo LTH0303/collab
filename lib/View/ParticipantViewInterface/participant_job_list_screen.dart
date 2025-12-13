@@ -1,261 +1,304 @@
+// lib/View/ParticipantViewInterface/participant_job_list_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-// ⚠️ 注意：请根据你的实际文件夹结构调整 import 路径
 import '../../ViewModel/JobViewModule/job_view_model.dart';
+import '../../ViewModel/ApplicationViewModel/application_view_model.dart';
 import '../../models/project_model.dart';
+import 'participant_profile_page.dart';
 
 class ParticipantJobBoard extends StatelessWidget {
+  const ParticipantJobBoard({super.key});
+
   @override
   Widget build(BuildContext context) {
-    // 获取 ViewModel
-    final viewModel = Provider.of<JobViewModel>(context);
+    final jobViewModel = Provider.of<JobViewModel>(context);
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // 浅灰背景，突出卡片
-      appBar: AppBar(
-        title: Column(
+      backgroundColor: const Color(0xFFF5F9FC),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Village Opportunities", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-            Text("Find tasks, earn rewards", style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(icon: Icon(Icons.filter_list), onPressed: () {}),
-          SizedBox(width: 10),
-        ],
-      ),
-      body: StreamBuilder<List<Project>>(
-        stream: viewModel.activeProjectsStream,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text("Error loading jobs: ${snapshot.error}"));
-          }
-
-          final projects = snapshot.data ?? [];
-
-          if (projects.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.search_off, size: 60, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text("No active projects found."),
-                  Text("Check back later!", style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            padding: EdgeInsets.all(16),
-            itemCount: projects.length,
-            itemBuilder: (context, index) {
-              return _buildProjectCard(context, projects[index]);
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildProjectCard(BuildContext context, Project project) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 1. 头部：渐变背景 + 标题
-          Container(
-            padding: EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [Colors.green.shade700, Colors.teal.shade600]),
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            // --- Header ---
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
-                      child: Text("Active Recruitment", style: TextStyle(color: Colors.white, fontSize: 10)),
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                      child: const CircleAvatar(radius: 24, backgroundColor: Colors.white, child: Icon(Icons.face)),
                     ),
-                    Icon(Icons.bookmark_border, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text("Ahmad bin Ali", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text("High Reliability", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
                   ],
                 ),
-                SizedBox(height: 10),
-                Text(
-                  project.title,
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                ),
+                IconButton(
+                    icon: const Icon(Icons.person_outline),
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ParticipantProfilePage()))
+                )
               ],
             ),
-          ),
+            const SizedBox(height: 24),
 
-          // 2. 内容区域
-          Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            // --- Skills Section ---
+            const Text("My Skills", style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                // 信息行：时间 & 人数
-                Row(
-                  children: [
-                    _iconText(Icons.access_time, project.timeline),
-                    SizedBox(width: 20),
-                    _iconText(Icons.people_outline, project.participantRange),
-                  ],
-                ),
-                SizedBox(height: 15),
-
-                // 技能标签
-                Text("Skills Needed", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                SizedBox(height: 5),
-                Wrap(
-                  spacing: 8,
-                  children: project.skills.map((s) => Chip(
-                    label: Text(s, style: TextStyle(fontSize: 11)),
-                    backgroundColor: Colors.grey[100],
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                  )).toList(),
-                ),
-
-                SizedBox(height: 20),
-                Divider(),
-                SizedBox(height: 10),
-
-                // --- 3. 核心修改：里程碑奖励 (垂直时间轴样式) ---
-                Text("Milestones & Incentives", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                SizedBox(height: 4),
-                Text("Complete tasks to unlock rewards", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                SizedBox(height: 15),
-
-                // 遍历显示里程碑
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
-                  itemCount: project.milestones.length,
-                  itemBuilder: (context, index) {
-                    final m = project.milestones[index];
-                    final isLast = index == project.milestones.length - 1;
-
-                    return IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 左侧：时间轴线
-                          Column(
-                            children: [
-                              CircleAvatar(
-                                radius: 6,
-                                backgroundColor: Colors.teal, // 绿色圆点
-                              ),
-                              if (!isLast)
-                                Expanded(child: Container(width: 2, color: Colors.grey[200])),
-                            ],
-                          ),
-                          SizedBox(width: 15),
-
-                          // 右侧：任务详情
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 20.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text("${m.phaseName}: ${m.taskName}",
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  SizedBox(height: 4),
-
-                                  // 奖励 (Incentive) - 突出显示
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                        color: Colors.orange.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.orange.withOpacity(0.3))
-                                    ),
-                                    child: Text(
-                                      "🎁 Reward: ${m.incentive}",
-                                      style: TextStyle(color: Colors.orange[800], fontSize: 12, fontWeight: FontWeight.w600),
-                                    ),
-                                  ),
-
-                                  // 验证方式 (Verification Type)
-                                  SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                          m.verificationType == 'photo' ? Icons.camera_alt : Icons.verified_user,
-                                          size: 12, color: Colors.grey
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        m.verificationType == 'photo' ? "Requires Photo Proof" : "Verified by Leader",
-                                        style: TextStyle(fontSize: 11, color: Colors.grey),
-                                      ),
-                                    ],
-                                  )
-                                ],
-                              ),
-                            ),
-                          )
-                        ],
-                      ),
-                    );
-                  },
-                ),
-
-                SizedBox(height: 10),
-                // 申请按钮
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal[800],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Application Submitted for ${project.title}!"))
-                      );
-                    },
-                    child: Text("Apply for Project", style: TextStyle(color: Colors.white, fontSize: 16)),
-                  ),
-                ),
+                _buildSkillChip("Agriculture", true),
+                _buildSkillChip("Construction", true),
+                _buildSkillChip("Electrical", false),
+                _buildSkillChip("Manual Labor", false),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 30),
+
+            // --- Available Projects List ---
+            const Text("Available Projects", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+
+            StreamBuilder<List<Project>>(
+              stream: jobViewModel.activeProjectsStream,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Padding(padding: EdgeInsets.only(top: 40), child: Text("No jobs available yet.")));
+                }
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: snapshot.data!.length,
+                  itemBuilder: (context, index) {
+                    return JobCard(project: snapshot.data![index]);
+                  },
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _iconText(IconData icon, String text) {
+  Widget _buildSkillChip(String label, bool isSelected) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFF2E5B3E) : Colors.grey[200],
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? Colors.white : Colors.black54,
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+    );
+  }
+}
+
+// --- Job Card Widget ---
+class JobCard extends StatelessWidget {
+  final Project project;
+  const JobCard({super.key, required this.project});
+
+  @override
+  Widget build(BuildContext context) {
+    final appViewModel = Provider.of<ApplicationViewModel>(context);
+
+    return FutureBuilder<String?>(
+      future: appViewModel.getApplicationStatusForProject(project.id!),
+      builder: (context, snapshot) {
+        String? status = snapshot.data;
+        bool isPending = status == 'pending';
+        bool isRejected = status == 'rejected';
+        bool isApproved = status == 'approved';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Match Badge
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: const Color(0xFFE0F2F1), borderRadius: BorderRadius.circular(8)),
+                    child: const Text("95% Skill Match", style: TextStyle(color: Color(0xFF00695C), fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                  const Icon(Icons.bookmark_border, color: Colors.grey),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Title & Location
+              Text(project.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.location_on, size: 14, color: Colors.blue),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      project.address.isNotEmpty ? project.address.split(',')[0] : "Kampung Baru",
+                      style: const TextStyle(color: Colors.black54, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Info Pills
+              Row(
+                children: [
+                  _buildInfoPill(Icons.access_time, "Duration", project.timeline),
+                  const SizedBox(width: 16),
+                  _buildInfoPill(Icons.attach_money, "Pay", "RM ${project.totalBudget}"),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _showProjectDetails(context, project),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        side: const BorderSide(color: Colors.grey),
+                      ),
+                      child: const Text("Details", style: TextStyle(color: Colors.black)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: (isPending || isRejected || isApproved || appViewModel.isLoading)
+                          ? null
+                          : () async {
+                        bool success = await appViewModel.applyForJob(project);
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Application Sent!")));
+                        } else if (appViewModel.error != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(appViewModel.error!), backgroundColor: Colors.red));
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isRejected ? Colors.red : (isApproved ? Colors.green : const Color(0xFF2E5B3E)),
+                        disabledBackgroundColor: isRejected ? Colors.red.shade100 : Colors.grey.shade300,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: appViewModel.isLoading
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : Text(
+                        isRejected ? "Rejected" : (isApproved ? "Hired" : (isPending ? "Pending" : "Apply Now")),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInfoPill(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
-        SizedBox(width: 5),
-        Text(text, style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.w500)),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, size: 16, color: Colors.blue),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ],
+        )
       ],
+    );
+  }
+
+  void _showProjectDetails(BuildContext context, Project project) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(width: 40, height: 4, color: Colors.grey[300])),
+              const SizedBox(height: 20),
+              Text(project.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              Text(project.description, style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 20),
+              const Text("Milestones Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+
+              // Safely render milestones
+              if (project.milestones.isEmpty)
+                const Text("No milestones defined.", style: TextStyle(color: Colors.grey))
+              else
+                ...project.milestones.map((m) => ListTile(
+                  leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                  title: Text(m.taskName),
+                  subtitle: Text("Allocated: RM ${m.allocatedBudget}"),
+                )),
+
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E5B3E)),
+                  child: const Text("Close", style: TextStyle(color: Colors.white)),
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

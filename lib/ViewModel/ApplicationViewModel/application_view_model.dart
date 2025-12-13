@@ -1,0 +1,101 @@
+// lib/ViewModel/ApplicationViewModel/application_view_model.dart
+
+import 'package:flutter/material.dart';
+import '../../models/ProjectRepository/i_application_repository.dart';
+import '../../models/application_model.dart';
+import '../../models/project_model.dart';
+import '../../models/DatabaseService/database_service.dart'; // Direct DB access for status check
+import 'package:firebase_auth/firebase_auth.dart';
+
+class ApplicationViewModel extends ChangeNotifier {
+  final IApplicationRepository _repo;
+  final DatabaseService _dbService = DatabaseService(); // Helper for status checks
+
+  ApplicationViewModel(this._repo);
+
+  bool _isLoading = false;
+  String? _error;
+
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+
+  // --- PARTICIPANT ACTIONS ---
+
+  Future<bool> applyForJob(Project project) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _error = "User not logged in";
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      String applicantName = user.displayName ?? user.email ?? "Unknown";
+
+      final app = Application(
+        projectId: project.id!,
+        projectTitle: project.title,
+        applicantId: user.uid,
+        applicantName: applicantName,
+        leaderId: project.leaderId ?? '',
+        appliedAt: DateTime.now(),
+      );
+
+      await _repo.applyForJob(app);
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+
+    } catch (e) {
+      _error = e.toString().replaceAll("Exception: ", "");
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // NEW: Check status for UI button
+  Future<String?> getApplicationStatusForProject(String projectId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    return await _dbService.getApplicationStatus(user.uid, projectId);
+  }
+
+  // --- LEADER ACTIONS ---
+
+  Stream<List<Application>> getLeaderApplications() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return Stream.value([]);
+    return _repo.getLeaderApplications(user.uid);
+  }
+
+  Stream<List<Application>> getProjectApplications(String projectId) {
+    return _repo.getProjectApplications(projectId);
+  }
+
+  Future<void> approveApplicant(Application app) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _repo.approveApplication(app);
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> rejectApplicant(Application app) async {
+    try {
+      await _repo.rejectApplication(app.id!);
+    } catch (e) {
+      print(e);
+    }
+  }
+}

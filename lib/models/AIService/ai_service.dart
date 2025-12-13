@@ -8,9 +8,8 @@ class AIService {
   late final GenerativeModel _model;
 
   AIService() {
-    // ⚠️ 记得换成你的真实 Key, 这里暂时留空，运行时环境会注入
-    const apiKey = "AIzaSyBxvDeDdjl63lRG8sEYeElG6V2e_fMOA8E";
-
+    // Ideally use environment variables for keys
+    const apiKey = "AIzaSyCMEgQ8wXEQ_Id8T1wDfP3wOeNoxmwSeFc";
     _model = GenerativeModel(
       model: 'gemini-2.5-flash',
       apiKey: apiKey,
@@ -18,48 +17,61 @@ class AIService {
     );
   }
 
-  Future<Project> generateProjectDraft(String resources) async {
+  Future<Project> generateProjectDraft(String resources, String budgetAmount) async {
     final prompt = '''
-      You are a rural development expert in Malaysia (Kampung context). A village leader has these initial resources: "$resources".
+      You are a senior rural development consultant in Malaysia.
       
-      Generate a comprehensive project plan in JSON structure based on these resources.
+      INPUTS:
+      1. Resources: "$resources"
+      2. Total Grant: RM $budgetAmount
       
-      RULES:
-      1. "starting_resources": Must include the user's input ("$resources") AND add other logical starting materials needed (e.g., if user inputs "land", you add "seeds", "hoes", "fertilizer").
-      2. "address": Generate a realistic sounding Malaysian Kampung address (e.g., "Kampung Baru, Lot 123...").
-      3. "incentive": Instead of monetary salary, provide specific incentives for each milestone (e.g., "50 points", "Bag of Harvest", "Community Credit").
-      4. "milestones": Include a "description" field explaining what the participant needs to do in detail.
+      TASK:
+      Generate a detailed, professional project plan JSON for a village rejuvenation project.
       
-      JSON Format:
+      STRICT REQUIREMENTS:
+      1. Milestones: Generate exactly 6 to 8 milestones. 
+         - Cover phases: Planning, Site Prep, Infrastructure, Planting/Stocking, Maintenance, and Harvest.
+      2. Descriptions: Must be detailed (2-3 sentences). Explain *what* to do and *why*.
+      3. Verification: Be specific. Instead of "Photo", use "Photo of cleared land", "Receipt of seeds", "Water quality report".
+      4. Address: Generate a realistic Malaysian Kampung address (e.g., Lot 123, Jalan Mawar, Kampung...).
+      5. Budget: Distribute the exact RM $budgetAmount across milestones based on realistic costs.
+      
+      RESPONSE FORMAT (JSON ONLY):
       {
-        "project_title": "String",
-        "description": "String (Short summary)",
-        "timeline": "String (e.g. 3-4 months)",
-        "required_skills": ["String", "String"],
-        "participant_range": "String (e.g. 5-8 participants)",
-        "starting_resources": ["String", "String"],
-        "address": "String",
+        "project_title": "Professional Title (e.g. Integrated Organic Chill Farm)",
+        "description": "A comprehensive summary of the project goals, impact on the village, and sustainability plan.",
+        "timeline": "e.g. 6 Months",
+        "total_budget": "$budgetAmount",
+        "required_skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4"],
+        "participant_range": "e.g. 5-8 Youth",
+        "starting_resources": ["Resource 1", "Resource 2"],
+        "address": "Full Address String",
         "milestones": [
           {
-            "phase_name": "Day 1",
-            "task_name": "Clear Land",
-            "description": "Clear weeds and rocks from the designated 2-acre plot to prepare for planting.",
-            "verification_type": "photo",
-            "incentive": "RM50 + Lunch"
+            "phase_name": "Phase 1: Preparation",
+            "task_name": "Site Clearing & Mapping",
+            "description": "Clear the designated 2-acre plot of weeds and debris. Map out the planting zones and irrigation paths.",
+            "verification_type": "Photo of cleared site & drawn map",
+            "incentive": "RM 50 + Lunch",
+            "allocated_budget": "300" 
           }
         ]
       }
     ''';
 
-    final response = await _model.generateContent([Content.text(prompt)]);
-
-    if (response.text == null) throw Exception("AI returned empty response");
-
     try {
-      final jsonMap = jsonDecode(response.text!);
+      final response = await _model.generateContent([Content.text(prompt)]);
+
+      if (response.text == null) throw Exception("AI returned empty response");
+
+      // Clean up potential markdown formatting if Gemini adds it
+      String cleanJson = response.text!.replaceAll('```json', '').replaceAll('```', '');
+
+      final jsonMap = jsonDecode(cleanJson);
       return Project.fromJson(jsonMap);
     } catch (e) {
-      throw Exception("Failed to parse AI JSON: $e");
+      print("AI Error: $e");
+      throw Exception("AI Service Error: $e");
     }
   }
 }

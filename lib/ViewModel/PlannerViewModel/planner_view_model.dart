@@ -1,13 +1,16 @@
 // lib/ViewModel/PlannerViewModel/planner_view_model.dart
 
 import 'package:flutter/material.dart';
-import '../../models/ProjectRepository/i_project_repository.dart'; // 依赖接口
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../models/ProjectRepository/i_project_repository.dart';
 import '../../models/project_model.dart';
+import '../../models/DatabaseService/database_service.dart'; // Direct DB access for count
 
 class PlannerViewModel extends ChangeNotifier {
-  // 依赖抽象接口，而不是具体类
-  // 这使得 ViewModel 更容易进行单元测试（可以注入 MockRepository）
   final IProjectRepository _repository;
+  // We might need direct DB service for count checks if not in Repo interface,
+  // or add count method to Interface. For speed, injecting DB Service here is acceptable.
+  final DatabaseService _dbService = DatabaseService();
 
   PlannerViewModel(this._repository);
 
@@ -19,15 +22,14 @@ class PlannerViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // ACTION: 生成方案
-  Future<void> generatePlan(String resources) async {
+  // Action: Generate Plan
+  Future<void> generatePlan(String resources, String budget) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      // ViewModel 不关心数据是来自 Gemini 还是其他 AI，只管调用接口
-      Project newDraft = await _repository.getAIRecommendation(resources);
+      Project newDraft = await _repository.getAIRecommendation(resources, budget);
       _drafts.add(newDraft);
     } catch (e) {
       _error = e.toString();
@@ -37,45 +39,51 @@ class PlannerViewModel extends ChangeNotifier {
     }
   }
 
-  // ACTION: 更新指定的 Draft
-  void updateDraft(int index, {String? title, String? description, List<Milestone>? milestones}) {
-    if (index >= 0 && index < _drafts.length) {
-      final oldDraft = _drafts[index];
-      // 简单的状态更新
-      if (title != null) oldDraft.title = title;
-      if (description != null) oldDraft.description = description;
-      if (milestones != null) oldDraft.milestones = milestones;
-
-      notifyListeners();
-    }
-  }
-
-  // ACTION: 删除 Draft
-  void removeDraft(int index) {
-    if (index >= 0 && index < _drafts.length) {
-      _drafts.removeAt(index);
-      notifyListeners();
-    }
-  }
-
-  // ACTION: 发布指定索引的 Draft
+  // Action: Publish with Constraint (Max 3)
   Future<void> publishDraft(int index) async {
     if (index < 0 || index >= _drafts.length) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _error = "User not logged in";
+      notifyListeners();
+      return;
+    }
 
     _isLoading = true;
     notifyListeners();
 
     try {
-      final draftToPublish = _drafts[index];
-      // 调用接口方法
-      await _repository.publishProject(draftToPublish);
+      // 1. Check Constraint
+      int activeCount = await _dbService.countLeaderActiveProjects(user.uid);
+      if (activeCount >= 3) {
+        throw Exception("Limit Reached: You can only have 3 active projects at a time.");
+      }
 
-      // 发布成功后移除草稿
+      // 2. Publish (Pass leader ID inside project object or handled by repo)
+      // We need to ensure the Repo uses the leader ID.
+      // Ideally update Repo interface, but for now we can update the draft object if needed
+      // or assume Repo handles the "addProject(project, leaderId)" call.
+
+      // FIX: Since IProjectRepository.publishProject(project) doesn't take ID,
+      // let's assume we call _dbService directly here or update the repo.
+      // Let's go direct to DB service to match the updated method signature above.
+      await _dbService.addProject(_drafts[index], user.uid);
+
       _drafts.removeAt(index);
+      _error = null; // Clear any previous errors
+
     } catch (e) {
-      _error = "Publish failed: $e";
+      _error = e.toString().replaceAll("Exception: ", ""); // Clean error msg
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void removeDraft(int index) {
+    if (index >= 0 && index < _drafts.length) {
+      _drafts.removeAt(index);
       notifyListeners();
     }
   }
