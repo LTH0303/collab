@@ -38,14 +38,11 @@ class PlannerViewModel extends ChangeNotifier {
   }
 
   // ACTION: 更新指定的 Draft
-  void updateDraft(int index, {String? title, String? description, List<Milestone>? milestones}) {
+  // 扩展此方法以触发监听器，在编辑页面直接修改了 Project 对象后调用此方法刷新 UI
+  void updateDraft(int index) {
     if (index >= 0 && index < _drafts.length) {
-      final oldDraft = _drafts[index];
-      // 简单的状态更新
-      if (title != null) oldDraft.title = title;
-      if (description != null) oldDraft.description = description;
-      if (milestones != null) oldDraft.milestones = milestones;
-
+      // 实际上在 EditProjectPage 中我们直接修改了 _drafts[index] 的引用对象
+      // 这里只需要通知 Listeners 即可
       notifyListeners();
     }
   }
