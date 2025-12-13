@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import '../../models/ProjectRepository/i_application_repository.dart';
 import '../../models/application_model.dart';
 import '../../models/project_model.dart';
-import '../../models/DatabaseService/database_service.dart'; // Direct DB access for status check
+import '../../models/DatabaseService/database_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ApplicationViewModel extends ChangeNotifier {
   final IApplicationRepository _repo;
-  final DatabaseService _dbService = DatabaseService(); // Helper for status checks
+  final DatabaseService _dbService = DatabaseService();
 
   ApplicationViewModel(this._repo);
 
@@ -59,7 +59,6 @@ class ApplicationViewModel extends ChangeNotifier {
     }
   }
 
-  // NEW: Check status for UI button
   Future<String?> getApplicationStatusForProject(String projectId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
@@ -76,6 +75,11 @@ class ApplicationViewModel extends ChangeNotifier {
 
   Stream<List<Application>> getProjectApplications(String projectId) {
     return _repo.getProjectApplications(projectId);
+  }
+
+  // NEW: Get Approved Team List
+  Stream<List<Application>> getProjectHiredList(String projectId) {
+    return _repo.getProjectApprovedApplications(projectId);
   }
 
   Future<void> approveApplicant(Application app) async {

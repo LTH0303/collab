@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/ApplicationViewModel/application_view_model.dart';
 import '../../models/application_model.dart';
+import 'applicant_profile_view.dart'; // Import the profile view
 
 class ApplicationListPage extends StatelessWidget {
   const ApplicationListPage({super.key});
@@ -36,8 +37,33 @@ class ApplicationListPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Applicant: ${app.applicantName}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text("For Project: ${app.projectTitle}", style: const TextStyle(color: Colors.grey)),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text("Applicant: ${app.applicantName}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                Text("For Project: ${app.projectTitle}", style: const TextStyle(color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                          // View Profile Button
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ApplicantProfileView(application: app),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.visibility_outlined, size: 18),
+                            label: const Text("View Profile"),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,

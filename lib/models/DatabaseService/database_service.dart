@@ -76,7 +76,7 @@ class DatabaseService {
     return snapshot.docs.isNotEmpty;
   }
 
-  // NEW: Get Status of Application for Specific Project
+  // Get Status of Application for Specific Project
   Future<String?> getApplicationStatus(String userId, String projectId) async {
     final snapshot = await _db.collection('applications')
         .where('applicant_id', isEqualTo: userId)
@@ -103,6 +103,17 @@ class DatabaseService {
     return _db.collection('applications')
         .where('project_id', isEqualTo: projectId)
         .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) => Application.fromJson(doc.data(), docId: doc.id))
+        .toList());
+  }
+
+  // NEW: Get Approved (Hired) Applications for a Project
+  Stream<List<Application>> getProjectApprovedApplications(String projectId) {
+    return _db.collection('applications')
+        .where('project_id', isEqualTo: projectId)
+        .where('status', isEqualTo: 'approved')
         .snapshots()
         .map((snapshot) => snapshot.docs
         .map((doc) => Application.fromJson(doc.data(), docId: doc.id))
@@ -139,14 +150,14 @@ class DatabaseService {
     await batch.commit();
   }
 
-  // NEW: Fetch User Profile Data
+  // Fetch User Profile Data
   Future<Map<String, dynamic>?> getUserProfile(String userId) async {
-    // Assuming users collection exists, if not we return basic info from App object
-    // For now returning mock/basic data if collection doesn't exist
+    // Return mock data if specific user collection implementation is missing
     return {
       'name': 'Youth Participant',
       'email': 'email@example.com',
-      'skills': ['Farming', 'Labor']
+      'skills': ['Farming', 'Labor'],
+      'reliability': 'High'
     };
   }
 }

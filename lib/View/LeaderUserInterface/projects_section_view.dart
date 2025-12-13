@@ -8,6 +8,8 @@ import '../../ViewModel/ApplicationViewModel/application_view_model.dart';
 import '../../models/project_model.dart';
 import '../../models/application_model.dart';
 import '../../models/DatabaseService/database_service.dart';
+import 'applicant_profile_view.dart';
+import 'hired_youth_list_view.dart'; // Import Hired List View
 
 class ProjectsSection extends StatefulWidget {
   const ProjectsSection({super.key});
@@ -113,7 +115,6 @@ class _ProjectsSectionState extends State<ProjectsSection> {
       padding: const EdgeInsets.all(20),
       itemCount: viewModel.drafts.length,
       itemBuilder: (context, index) {
-        // Ensure we pass the project properly to the card
         return DraftInlineEditorCard(
           project: viewModel.drafts[index],
           onPublish: () => viewModel.publishDraft(index),
@@ -236,7 +237,32 @@ class _ProjectsSectionState extends State<ProjectsSection> {
               Center(child: Container(width: 40, height: 4, color: Colors.grey[300])),
               const SizedBox(height: 20),
 
-              Text(project.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(project.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  ),
+                  // NEW: Button to view Hired Team
+                  IconButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => HiredYouthListView(
+                            projectId: project.id!,
+                            projectTitle: project.title,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.groups, color: Colors.blue, size: 28),
+                    tooltip: "View Hired Team",
+                  )
+                ],
+              ),
+
               const SizedBox(height: 20),
 
               if (project.id != null)
@@ -281,7 +307,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
         const Text("Pending Applications", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange)),
         const SizedBox(height: 8),
         SizedBox(
-          height: 150,
+          height: 160,
           child: StreamBuilder<List<Application>>(
             stream: appViewModel.getProjectApplications(projectId),
             builder: (context, snapshot) {
@@ -305,21 +331,41 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                     margin: const EdgeInsets.only(bottom: 8),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(app.applicantName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              Text("Applied: ${app.appliedAt.toString().substring(0,10)}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(app.applicantName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text("Applied: ${app.appliedAt.toString().substring(0,10)}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => appViewModel.rejectApplicant(app)),
+                                  IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => appViewModel.approveApplicant(app)),
+                                ],
+                              )
                             ],
                           ),
-                          Row(
-                            children: [
-                              IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => appViewModel.rejectApplicant(app)),
-                              IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => appViewModel.approveApplicant(app)),
-                            ],
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ApplicantProfileView(application: app),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.person_search, size: 14),
+                              label: const Text("View Profile", style: TextStyle(fontSize: 12)),
+                              style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                            ),
                           )
                         ],
                       ),
@@ -335,7 +381,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 }
 
-// --- FIXED DRAFT INLINE EDITOR CARD ---
+// --- DRAFT INLINE EDITOR CARD (Included for completeness) ---
 class DraftInlineEditorCard extends StatefulWidget {
   final Project project;
   final VoidCallback onPublish;
@@ -351,7 +397,6 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
   late TextEditingController _titleController;
   late TextEditingController _descController;
   late TextEditingController _budgetController;
-  // Use a growable list for milestone controllers
   final List<Map<String, TextEditingController>> _milestoneControllers = [];
 
   @override
@@ -361,7 +406,6 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
     _descController = TextEditingController(text: widget.project.description);
     _budgetController = TextEditingController(text: widget.project.totalBudget);
 
-    // Initialize controllers for existing milestones
     for (var m in widget.project.milestones) {
       _milestoneControllers.add({
         'task': TextEditingController(text: m.taskName),
@@ -383,13 +427,10 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
   }
 
   void _syncAndPublish() {
-    // 1. Sync basic info
     widget.project.title = _titleController.text;
     widget.project.description = _descController.text;
     widget.project.totalBudget = _budgetController.text;
 
-    // 2. Sync Milestones
-    // IMPORTANT: Ensure we don't go out of bounds if list sizes differ
     int loopCount = _milestoneControllers.length;
     if (widget.project.milestones.length < loopCount) loopCount = widget.project.milestones.length;
 
@@ -397,8 +438,6 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
       widget.project.milestones[i].taskName = _milestoneControllers[i]['task']!.text;
       widget.project.milestones[i].allocatedBudget = _milestoneControllers[i]['budget']!.text;
     }
-
-    // 3. Call publish
     widget.onPublish();
   }
 
@@ -417,7 +456,6 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
@@ -442,14 +480,11 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
               ],
             ),
           ),
-
-          // Body
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title
                 const Text("PROJECT TITLE", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
                 TextField(
                   controller: _titleController,
@@ -457,8 +492,6 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
                   decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: "Enter Title"),
                 ),
                 const Divider(),
-
-                // Description
                 const Text("DESCRIPTION", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
                 TextField(
                   controller: _descController,
@@ -467,8 +500,6 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
                   decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: "Enter Description"),
                 ),
                 const SizedBox(height: 12),
-
-                // Budget
                 const Text("TOTAL BUDGET (RM)", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
                 TextField(
                   controller: _budgetController,
@@ -477,8 +508,6 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
                   decoration: const InputDecoration(isDense: true, border: InputBorder.none),
                 ),
                 const SizedBox(height: 20),
-
-                // Milestones Header
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
@@ -491,13 +520,8 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // Milestones List - FIX: Use a fixed height or shrinkwrap properly
-                // We use a Column of children instead of nested ListView to avoid scrolling conflicts if possible
-                // or just shrinkwrap.
                 if (_milestoneControllers.isEmpty)
                   const Text("No milestones generated.", style: TextStyle(color: Colors.grey)),
-
                 ...List.generate(_milestoneControllers.length, (i) {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -531,11 +555,8 @@ class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
                       ],
                     ),
                   );
-                }
-                ),
-
+                }),
                 const SizedBox(height: 24),
-
                 SizedBox(
                   width: double.infinity,
                   height: 48,

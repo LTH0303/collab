@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../../ViewModel/PlannerViewModel/planner_view_model.dart';
 import 'leader_profile_page.dart';
 import 'projects_section_view.dart';
-import 'application_list_page.dart'; // Import this
+import 'application_list_page.dart'; // Still imported if needed elsewhere, but link removed from AppBar
 
 class LeaderMainLayout extends StatefulWidget {
   const LeaderMainLayout({super.key});
@@ -55,16 +55,7 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
           ],
         ),
         actions: [
-          // NEW: Application Notification Icon
-          IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.black),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ApplicationListPage()),
-              );
-            },
-          ),
+          // REMOVED: Notification Icon as per request
           IconButton(
             icon: const Icon(Icons.person_outline, color: Colors.black),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderProfilePage())),

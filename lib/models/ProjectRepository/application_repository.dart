@@ -34,10 +34,15 @@ class ApplicationRepository implements IApplicationRepository {
     return _dbService.getLeaderPendingApplications(leaderId);
   }
 
-  // NEW Implementation
   @override
   Stream<List<Application>> getProjectApplications(String projectId) {
     return _dbService.getProjectPendingApplications(projectId);
+  }
+
+  // NEW Implementation
+  @override
+  Stream<List<Application>> getProjectApprovedApplications(String projectId) {
+    return _dbService.getProjectApprovedApplications(projectId);
   }
 
   @override
