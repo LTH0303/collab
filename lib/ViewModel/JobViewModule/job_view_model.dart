@@ -57,30 +57,30 @@ class JobViewModel extends ChangeNotifier {
   }
 
   // --- UPDATED Submit Milestone Logic ---
-  // Replaced the old boolean logic with the new status string logic
   Future<void> submitMilestoneExpense(Project project, int milestoneIndex, String amount) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     try {
       if (project.id == null) return;
 
-      // Use the new method in DatabaseService
-      // Passing a mock photo URL for now as requested
+      String userName = user.displayName ?? user.email ?? "Unknown";
+
+      // Use the new method in DatabaseService supporting multiple submissions
       await _dbService.submitMilestone(
           project.id!,
           milestoneIndex,
+          user.uid,
+          userName,
           amount,
           "https://via.placeholder.com/150" // Mock photo URL
       );
 
-      // Optimistic UI Update (optional, helps UI feel faster)
-      if (milestoneIndex < project.milestones.length) {
-        project.milestones[milestoneIndex].expenseClaimed = amount;
-        project.milestones[milestoneIndex].status = 'pending_review';
-      }
-
+      // We don't manually update the local object here as easily because it's a list now,
+      // and the Stream will refresh the UI automatically.
       notifyListeners();
     } catch (e) {
       print("Error submitting: $e");
-      // You can expose an error state here if you want the UI to show a snackbar
     }
   }
 }

@@ -1,6 +1,7 @@
 // lib/View/ParticipantViewInterface/active_project_details.dart
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/project_model.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/JobViewModule/job_view_model.dart';
@@ -18,10 +19,13 @@ class _ActiveProjectDetailsState extends State<ActiveProjectDetails> {
   void _showSubmitDialog(BuildContext context, int index) {
     final expenseController = TextEditingController();
     final milestone = widget.project.milestones[index];
+    // CRITICAL FIX: Capture Messenger
+    final messenger = ScaffoldMessenger.of(context);
+    final viewModel = Provider.of<JobViewModel>(context, listen: false);
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog( // Use ctx
         title: Text("Submit: ${milestone.taskName}"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -50,22 +54,26 @@ class _ActiveProjectDetailsState extends State<ActiveProjectDetails> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
-            onPressed: () {
-              // 1. Get amount
+            onPressed: () async {
               String amount = expenseController.text;
               if (amount.isEmpty) return;
 
-              // 2. Call ViewModel to submit
-              Provider.of<JobViewModel>(context, listen: false).submitMilestoneExpense(
+              Navigator.pop(ctx);
+
+              messenger.showSnackBar(const SnackBar(content: Text("Submitting...")));
+
+              // Ensure we are not awaiting without try/catch if it throws,
+              // but submitMilestoneExpense handles its own try/catch usually.
+              // Better to wrap here if ViewModel rethrows.
+              await viewModel.submitMilestoneExpense(
                   widget.project,
                   index,
                   amount
               );
 
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Submitted for review!")));
+              messenger.showSnackBar(const SnackBar(content: Text("Submitted for review!")));
             },
             child: const Text("Submit"),
           ),
@@ -76,6 +84,8 @@ class _ActiveProjectDetailsState extends State<ActiveProjectDetails> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.project.title)),
       body: SingleChildScrollView(
@@ -101,30 +111,50 @@ class _ActiveProjectDetailsState extends State<ActiveProjectDetails> {
                 // Logic: Locked if previous is not complete
                 bool isLocked = index > 0 && !widget.project.milestones[index-1].isCompleted;
 
+                // Find my submission (if any)
+                MilestoneSubmission? mySubmission;
+                if (user != null) {
+                  try {
+                    mySubmission = m.submissions.firstWhere((s) => s.userId == user.uid);
+                  } catch (e) {
+                    // No submission found
+                  }
+                }
+
+                bool hasSubmitted = mySubmission != null;
+                bool isMyCompleted = mySubmission?.status == 'approved' || m.isCompleted;
+
                 return Card(
                   color: isLocked ? Colors.grey[100] : Colors.white,
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: m.isCompleted ? Colors.green : (isLocked ? Colors.grey : Colors.blue),
-                      child: Icon(m.isCompleted ? Icons.check : Icons.work, color: Colors.white, size: 16),
+                      backgroundColor: isMyCompleted ? Colors.green : (isLocked ? Colors.grey : Colors.blue),
+                      child: Icon(isMyCompleted ? Icons.check : Icons.work, color: Colors.white, size: 16),
                     ),
                     title: Text(m.taskName),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text("Allocated: RM ${m.allocatedBudget}"),
-                        if (m.isCompleted)
-                          Text("Claimed: RM ${m.expenseClaimed}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        if (hasSubmitted)
+                          Text("My Claim: RM ${mySubmission!.expenseClaimed} (${mySubmission.status})",
+                              style: TextStyle(
+                                  color: mySubmission.status == 'approved' ? Colors.green : Colors.orange,
+                                  fontWeight: FontWeight.bold
+                              )
+                          ),
                       ],
                     ),
-                    trailing: m.isCompleted
+                    trailing: isMyCompleted
                         ? const Icon(Icons.verified, color: Colors.green)
                         : (isLocked
                         ? const Icon(Icons.lock, color: Colors.grey)
+                        : (hasSubmitted && mySubmission!.status == 'pending')
+                        ? const Text("Pending Review", style: TextStyle(color: Colors.orange, fontSize: 12))
                         : ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
                       onPressed: () => _showSubmitDialog(context, index),
-                      child: const Text("Submit"),
+                      child: Text(hasSubmitted && mySubmission!.status == 'rejected' ? "Retry" : "Submit"),
                     )
                     ),
                   ),

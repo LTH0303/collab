@@ -23,7 +23,6 @@ class DatabaseService {
     });
   }
 
-  // Safe Start Project (No Transaction Crash)
   Future<void> startProject(String projectId) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
 
@@ -53,7 +52,6 @@ class DatabaseService {
     }
   }
 
-  // --- NEW: Unlock Next Phase Explicitly ---
   Future<void> unlockNextPhase(String projectId, int currentPhaseIndex) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
 
@@ -67,21 +65,19 @@ class DatabaseService {
       List<dynamic> milestonesRaw = data['milestones'] ?? [];
       List<Milestone> milestones = milestonesRaw.map((m) => Milestone.fromJson(m)).toList();
 
-      // Ensure next index exists
+      // Mark current phase as explicitly completed (if not already)
+      milestones[currentPhaseIndex].status = 'completed';
+
+      // Unlock next
       int nextIndex = currentPhaseIndex + 1;
       if (nextIndex < milestones.length) {
         milestones[nextIndex].status = 'open';
-
-        // Optional: Ensure current is marked completed if not already?
-        // usually approval handles that, but good to be safe.
-        if (milestones[currentPhaseIndex].status != 'completed') {
-          milestones[currentPhaseIndex].status = 'completed';
-        }
-
-        await projectRef.update({
-          'milestones': milestones.map((m) => m.toJson()).toList()
-        });
       }
+
+      await projectRef.update({
+        'milestones': milestones.map((m) => m.toJson()).toList()
+      });
+
     } catch (e) {
       print("Error unlocking phase: $e");
       rethrow;
@@ -135,68 +131,77 @@ class DatabaseService {
         .toList());
   }
 
-  // --- MILESTONE SUBMISSION FLOW ---
+  // --- NEW MILESTONE SUBMISSION FLOW (Multiple Submissions) ---
 
-  Future<void> submitMilestone(String projectId, int milestoneIndex, String expense, String? photoUrl) async {
+  Future<void> submitMilestone(String projectId, int milestoneIndex, String userId, String userName, String expense, String? photoUrl) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
 
-    DocumentSnapshot snapshot = await projectRef.get();
-    if (!snapshot.exists) throw Exception("Project not found");
+    try {
+      // 1. Fetch current data
+      DocumentSnapshot snapshot = await projectRef.get();
+      if (!snapshot.exists) throw Exception("Project not found");
 
-    Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
-    List<dynamic> rawMilestones = data['milestones'] ?? [];
-    List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
+      Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
+      List<dynamic> rawMilestones = data['milestones'] ?? [];
+      List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
 
-    if (milestoneIndex < milestones.length) {
-      milestones[milestoneIndex].expenseClaimed = expense;
-      milestones[milestoneIndex].proofImageUrl = photoUrl;
-      milestones[milestoneIndex].status = 'pending_review';
-      milestones[milestoneIndex].rejectionReason = null;
+      // 2. Modify data in memory
+      if (milestoneIndex < milestones.length) {
+        final submission = MilestoneSubmission(
+          userId: userId,
+          userName: userName,
+          expenseClaimed: expense,
+          proofImageUrl: photoUrl ?? '',
+          status: 'pending',
+          submittedAt: DateTime.now(),
+        );
 
-      await projectRef.update({
-        'milestones': milestones.map((m) => m.toJson()).toList()
-      });
+        milestones[milestoneIndex].submissions.add(submission);
+
+        // 3. Write data back (Standard update, no transaction to avoid Windows crash)
+        await projectRef.update({
+          'milestones': milestones.map((m) => m.toJson()).toList()
+        });
+      }
+    } catch (e) {
+      print("Error submitting milestone: $e");
+      rethrow;
     }
   }
 
-  // UPDATED: Only approves the submission, DOES NOT unlock next phase automatically
-  Future<void> approveMilestone(String projectId, int milestoneIndex) async {
+  Future<void> reviewMilestoneSubmission(String projectId, int milestoneIndex, String submissionUserId, bool isApproved, String? rejectionReason) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
 
-    DocumentSnapshot snapshot = await projectRef.get();
-    if (!snapshot.exists) throw Exception("Project not found");
+    try {
+      // 1. Fetch current data
+      DocumentSnapshot snapshot = await projectRef.get();
+      if (!snapshot.exists) throw Exception("Project not found");
 
-    Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
-    List<dynamic> rawMilestones = data['milestones'] ?? [];
-    List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
+      Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
+      List<dynamic> rawMilestones = data['milestones'] ?? [];
+      List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
 
-    if (milestoneIndex < milestones.length) {
-      milestones[milestoneIndex].status = 'completed';
-      // Next phase unlocking is removed from here
+      // 2. Modify data
+      if (milestoneIndex < milestones.length) {
+        var milestone = milestones[milestoneIndex];
 
-      await projectRef.update({
-        'milestones': milestones.map((m) => m.toJson()).toList(),
-      });
-    }
-  }
+        int subIndex = milestone.submissions.indexWhere((s) => s.userId == submissionUserId && s.status == 'pending');
 
-  Future<void> rejectMilestone(String projectId, int milestoneIndex, String reason) async {
-    DocumentReference projectRef = _db.collection('projects').doc(projectId);
+        if (subIndex != -1) {
+          milestone.submissions[subIndex].status = isApproved ? 'approved' : 'rejected';
+          if (!isApproved) {
+            milestone.submissions[subIndex].rejectionReason = rejectionReason;
+          }
+        }
 
-    DocumentSnapshot snapshot = await projectRef.get();
-    if (!snapshot.exists) throw Exception("Project not found");
-
-    Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
-    List<dynamic> rawMilestones = data['milestones'] ?? [];
-    List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
-
-    if (milestoneIndex < milestones.length) {
-      milestones[milestoneIndex].status = 'rejected';
-      milestones[milestoneIndex].rejectionReason = reason;
-
-      await projectRef.update({
-        'milestones': milestones.map((m) => m.toJson()).toList()
-      });
+        // 3. Update
+        await projectRef.update({
+          'milestones': milestones.map((m) => m.toJson()).toList()
+        });
+      }
+    } catch (e) {
+      print("Error reviewing milestone: $e");
+      rethrow;
     }
   }
 

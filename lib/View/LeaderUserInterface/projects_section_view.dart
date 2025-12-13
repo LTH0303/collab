@@ -154,10 +154,8 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 
   Widget _buildActiveCard(BuildContext context, Project project) {
-    bool hasPendingReview = project.milestones.any((m) => m.isPendingReview);
-
-    // Check if project has started (is any milestone open or completed?)
-    bool isProjectStarted = project.milestones.any((m) => m.isOpen || m.isCompleted || m.isPendingReview);
+    bool hasPendingReview = project.milestones.any((m) => m.hasPendingReviews);
+    bool isProjectStarted = project.milestones.isNotEmpty && (project.milestones[0].isOpen || project.milestones[0].isCompleted);
 
     return GestureDetector(
       onTap: () => _showActiveProjectDetails(context, project, isProjectStarted),
@@ -331,8 +329,12 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                     var index = entry.key;
                     var m = entry.value;
 
+                    // UPDATED LOGIC:
+                    // Can unlock next IF:
+                    // 1. Current phase has AT LEAST ONE approved submission (OR is already marked completed)
+                    // 2. Next phase exists and is locked
                     bool isNextLocked = index + 1 < project.milestones.length && project.milestones[index+1].isLocked;
-                    bool canUnlockNext = m.isCompleted && isNextLocked;
+                    bool canUnlockNext = (m.hasApprovedSubmissions || m.isCompleted) && isNextLocked;
 
                     return Column(
                       children: [
@@ -365,8 +367,10 @@ class _ProjectsSectionState extends State<ProjectsSection> {
     );
   }
 
-  // --- SAFE CONFIRMATION DIALOG ---
   void _showUnlockConfirmation(BuildContext context, Project project, int index) {
+    // Capture Messenger
+    final messenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -376,8 +380,6 @@ class _ProjectsSectionState extends State<ProjectsSection> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
-              // CRITICAL: Capture context before async calls
-              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(ctx);
 
               try {
@@ -398,15 +400,15 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   Widget _buildLeaderMilestoneReviewTile(BuildContext context, Project project, int index, Milestone m) {
     Color color = Colors.grey;
     IconData icon = Icons.circle_outlined;
-    bool needsReview = false;
+    bool needsReview = m.hasPendingReviews;
+    int pendingCount = m.submissions.where((s) => s.status == 'pending').length;
 
     if (m.isCompleted) {
       color = Colors.green;
       icon = Icons.check_circle;
-    } else if (m.isPendingReview) {
+    } else if (needsReview) {
       color = Colors.orange;
       icon = Icons.hourglass_full;
-      needsReview = true;
     } else if (m.isOpen) {
       color = Colors.blue;
       icon = Icons.play_circle_outline;
@@ -423,97 +425,139 @@ class _ProjectsSectionState extends State<ProjectsSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("Allocated: RM ${m.allocatedBudget}"),
-            if (m.isPendingReview)
-              Text("Claimed: RM ${m.expenseClaimed}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
-            if (m.isOpen)
+            if (m.hasApprovedSubmissions)
+              Text("Approved: RM ${m.totalApprovedExpenses}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+            if (needsReview)
+              Text("$pendingCount Submission(s) Pending", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
+            if (m.isOpen && !needsReview)
               const Text("IN PROGRESS", style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold))
           ],
         ),
         trailing: needsReview
             ? ElevatedButton(
-          onPressed: () => _showReviewDialog(context, project, index, m),
+          onPressed: () => _showReviewListDialog(context, project, index, m),
           style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white, textStyle: const TextStyle(fontSize: 12)),
-          child: const Text("Review"),
+          child: Text("Review ($pendingCount)"),
         )
             : null,
       ),
     );
   }
 
-  // --- SAFE REVIEW DIALOG ---
-  void _showReviewDialog(BuildContext context, Project project, int index, Milestone m) {
-    final reasonController = TextEditingController();
-
-    showDialog(
+  void _showReviewListDialog(BuildContext context, Project project, int index, Milestone m) {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text("Review: ${m.taskName}"),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 150,
-                width: double.infinity,
-                color: Colors.grey[300],
-                child: const Center(child: Text("Proof Photo (Mock)", style: TextStyle(color: Colors.black54))),
-              ),
-              const SizedBox(height: 16),
-              Text("Claimed Expenses: RM ${m.expenseClaimed}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const Text("Allocated Budget: RM 300", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              const SizedBox(height: 20),
-              const Text("If rejecting, please state reason:", style: TextStyle(fontSize: 12)),
-              TextField(
-                controller: reasonController,
-                decoration: const InputDecoration(hintText: "Reason for rejection..."),
-              )
-            ],
-          ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              if (reasonController.text.isEmpty) {
-                // We can use context here safely because we haven't popped yet
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a reason for rejection.")));
-                return;
-              }
-              // CRITICAL: Capture context before async gap
-              final messenger = ScaffoldMessenger.of(context);
-              Navigator.pop(ctx);
-
-              try {
-                await DatabaseService().rejectMilestone(project.id!, index, reasonController.text);
-                messenger.showSnackBar(const SnackBar(content: Text("Submission Rejected."), backgroundColor: Colors.red));
-              } catch (e) {
-                messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-              }
-            },
-            child: const Text("Reject", style: TextStyle(color: Colors.red)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              // CRITICAL: Capture context before async gap
-              final messenger = ScaffoldMessenger.of(context);
-              Navigator.pop(ctx);
-
-              try {
-                await DatabaseService().approveMilestone(project.id!, index);
-                messenger.showSnackBar(const SnackBar(content: Text("Submission Approved."), backgroundColor: Colors.green));
-              } catch (e) {
-                messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text("Approve Submission", style: TextStyle(color: Colors.white)),
-          ),
-        ],
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Text("Pending Submissions", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            Expanded(
+              child: ListView(
+                children: m.submissions.where((s) => s.status == 'pending').map((sub) {
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const CircleAvatar(radius: 16, backgroundColor: Colors.blue, child: Icon(Icons.person, size: 16, color: Colors.white)),
+                              const SizedBox(width: 8),
+                              Text(sub.userName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              const Spacer(),
+                              Text("RM ${sub.expenseClaimed}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            height: 120,
+                            color: Colors.grey[200],
+                            alignment: Alignment.center,
+                            child: const Text("Photo Proof Mockup", style: TextStyle(color: Colors.grey)),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              OutlinedButton(
+                                onPressed: () => _handleSubmissionAction(context, project.id!, index, sub.userId, false),
+                                style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                                child: const Text("Reject"),
+                              ),
+                              const SizedBox(width: 12),
+                              ElevatedButton(
+                                onPressed: () => _handleSubmissionAction(context, project.id!, index, sub.userId, true),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                                child: const Text("Approve"),
+                              ),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ... (Keep existing _buildPendingApplicationsSection and DraftInlineEditorCard classes as they are)
+  void _handleSubmissionAction(BuildContext context, String projectId, int milestoneIndex, String userId, bool approve) {
+    final reasonController = TextEditingController();
+    // Capture messenger here too, although typically we are inside a modal.
+    // Usually safest to rely on the parent scaffold messenger if possible, but
+    // since we are popping the bottom sheet, the context of the bottom sheet builder becomes invalid.
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (!approve) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Reject Submission"),
+          content: TextField(
+            controller: reasonController,
+            decoration: const InputDecoration(hintText: "Enter reason..."),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx); // Close dialog
+                Navigator.pop(context); // Close bottom sheet (using outer context)
+
+                await DatabaseService().reviewMilestoneSubmission(projectId, milestoneIndex, userId, false, reasonController.text);
+                messenger.showSnackBar(const SnackBar(content: Text("Submission Rejected."), backgroundColor: Colors.red));
+              },
+              child: const Text("Confirm Reject"),
+            )
+          ],
+        ),
+      );
+    } else {
+      Navigator.pop(context); // Close bottom sheet
+
+      // Async op
+      DatabaseService().reviewMilestoneSubmission(projectId, milestoneIndex, userId, true, null)
+          .then((_) => messenger.showSnackBar(const SnackBar(content: Text("Submission Approved!"), backgroundColor: Colors.green)))
+          .catchError((e) => messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red)));
+    }
+  }
+
+  // ... (Rest of the file remains similar, existing helpers)
   Widget _buildPendingApplicationsSection(BuildContext context, String projectId) {
     final appViewModel = Provider.of<ApplicationViewModel>(context, listen: false);
 

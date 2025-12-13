@@ -70,6 +70,50 @@ class Project {
   }
 }
 
+class MilestoneSubmission {
+  String userId;
+  String userName;
+  String expenseClaimed;
+  String proofImageUrl;
+  String status; // 'pending', 'approved', 'rejected'
+  String? rejectionReason;
+  DateTime submittedAt;
+
+  MilestoneSubmission({
+    required this.userId,
+    required this.userName,
+    required this.expenseClaimed,
+    required this.proofImageUrl,
+    this.status = 'pending',
+    this.rejectionReason,
+    required this.submittedAt,
+  });
+
+  factory MilestoneSubmission.fromJson(Map<String, dynamic> json) {
+    return MilestoneSubmission(
+      userId: json['user_id'] ?? '',
+      userName: json['user_name'] ?? 'Unknown',
+      expenseClaimed: json['expense_claimed']?.toString() ?? '0',
+      proofImageUrl: json['proof_image_url'] ?? '',
+      status: json['status'] ?? 'pending',
+      rejectionReason: json['rejection_reason'],
+      submittedAt: json['submitted_at'] != null
+          ? DateTime.parse(json['submitted_at'])
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'user_id': userId,
+    'user_name': userName,
+    'expense_claimed': expenseClaimed,
+    'proof_image_url': proofImageUrl,
+    'status': status,
+    'rejection_reason': rejectionReason,
+    'submitted_at': submittedAt.toIso8601String(),
+  };
+}
+
 class Milestone {
   String phaseName;
   String taskName;
@@ -78,11 +122,8 @@ class Milestone {
   String description;
   String allocatedBudget;
 
-  // Submission & Review Fields
-  String expenseClaimed;
-  String? proofImageUrl; // URL for photo
-  String status; // 'locked', 'open', 'pending_review', 'completed', 'rejected'
-  String? rejectionReason;
+  String status; // 'locked', 'open', 'completed' (Note: 'pending_review' logic now depends on submissions)
+  List<MilestoneSubmission> submissions; // List of submissions from different youths
 
   Milestone({
     required this.phaseName,
@@ -91,10 +132,8 @@ class Milestone {
     required this.incentive,
     this.description = '',
     this.allocatedBudget = '0',
-    this.expenseClaimed = '0',
-    this.proofImageUrl,
     this.status = 'locked',
-    this.rejectionReason,
+    this.submissions = const [],
   });
 
   factory Milestone.fromJson(Map<String, dynamic> json) {
@@ -105,10 +144,10 @@ class Milestone {
       incentive: json['incentive'] ?? '',
       description: json['description'] ?? 'Perform the task according to village guidelines.',
       allocatedBudget: json['allocated_budget']?.toString() ?? '0',
-      expenseClaimed: json['expense_claimed']?.toString() ?? '0',
-      proofImageUrl: json['proof_image_url'],
       status: json['status'] ?? 'locked',
-      rejectionReason: json['rejection_reason'],
+      submissions: (json['submissions'] as List? ?? [])
+          .map((s) => MilestoneSubmission.fromJson(s))
+          .toList(),
     );
   }
 
@@ -119,16 +158,22 @@ class Milestone {
     'incentive': incentive,
     'description': description,
     'allocated_budget': allocatedBudget,
-    'expense_claimed': expenseClaimed,
-    'proof_image_url': proofImageUrl,
     'status': status,
-    'rejection_reason': rejectionReason,
+    'submissions': submissions.map((s) => s.toJson()).toList(),
   };
 
-  // Helper for UI
-  bool get isCompleted => status == 'completed';
-  bool get isPendingReview => status == 'pending_review';
-  bool get isRejected => status == 'rejected';
+  // Helper properties
   bool get isOpen => status == 'open';
   bool get isLocked => status == 'locked';
+  bool get isCompleted => status == 'completed'; // Whole phase marked complete by leader
+
+  bool get hasPendingReviews => submissions.any((s) => s.status == 'pending');
+  bool get hasApprovedSubmissions => submissions.any((s) => s.status == 'approved');
+
+  // Helper to calculate total claimed from approved submissions
+  double get totalApprovedExpenses {
+    return submissions
+        .where((s) => s.status == 'approved')
+        .fold(0.0, (sum, s) => sum + (double.tryParse(s.expenseClaimed) ?? 0));
+  }
 }
