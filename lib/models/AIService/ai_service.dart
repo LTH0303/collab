@@ -9,7 +9,7 @@ class AIService {
 
   AIService() {
     // ⚠️ 记得换成你的真实 Key, 这里暂时留空，运行时环境会注入
-    const apiKey = "AIzaSyBHyw6OekIZw9KJOPuyS0Okok-S-8nnRMA";
+    const apiKey = "-";
 
     _model = GenerativeModel(
       model: 'gemini-2.5-flash',
