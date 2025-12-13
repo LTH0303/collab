@@ -1,37 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-// ⚠️ 注意：请根据你的实际文件夹结构调整 import 路径
 import '../../ViewModel/JobViewModule/job_view_model.dart';
 import '../../models/project_model.dart';
 
 class ParticipantJobBoard extends StatelessWidget {
+  const ParticipantJobBoard({super.key});
+
   @override
   Widget build(BuildContext context) {
     // 获取 ViewModel
     final viewModel = Provider.of<JobViewModel>(context);
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // 浅灰背景，突出卡片
+      backgroundColor: Colors.grey[50], // 浅灰背景
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          children: const [
             Text("Village Opportunities", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-            Text("Find tasks, earn rewards", style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+            Text("Find tasks, earn rewards", style: TextStyle(fontSize: 12, color: Colors.grey)),
           ],
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(icon: Icon(Icons.filter_list), onPressed: () {}),
-          SizedBox(width: 10),
+          IconButton(
+            icon: const Icon(Icons.filter_list, color: Colors.black87),
+            onPressed: () {},
+          ),
+          const SizedBox(width: 10),
         ],
       ),
       body: StreamBuilder<List<Project>>(
         stream: viewModel.activeProjectsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
             return Center(child: Text("Error loading jobs: ${snapshot.error}"));
@@ -44,17 +48,16 @@ class ParticipantJobBoard extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.search_off, size: 60, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text("No active projects found."),
-                  Text("Check back later!", style: TextStyle(color: Colors.grey)),
+                  Icon(Icons.search_off, size: 64, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  const Text("No active projects found.", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ],
               ),
             );
           }
 
           return ListView.builder(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             itemCount: projects.length,
             itemBuilder: (context, index) {
               return _buildProjectCard(context, projects[index]);
@@ -67,22 +70,26 @@ class ParticipantJobBoard extends StatelessWidget {
 
   Widget _buildProjectCard(BuildContext context, Project project) {
     return Container(
-      margin: EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 4)),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. 头部：渐变背景 + 标题
+          // === 顶部区域 (蓝色背景) ===
           Container(
-            padding: EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [Colors.green.shade700, Colors.teal.shade600]),
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1E88E5), Color(0xFF42A5F5)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
             ),
             child: Column(
@@ -92,153 +99,141 @@ class ParticipantJobBoard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
-                      child: Text("Active Recruitment", style: TextStyle(color: Colors.white, fontSize: 10)),
+                      child: const Text("Active Recruitment", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
-                    Icon(Icons.bookmark_border, color: Colors.white),
+                    const Icon(Icons.bookmark_border, color: Colors.white),
                   ],
                 ),
-                SizedBox(height: 10),
+                const SizedBox(height: 12),
+                // 标题 (自动换行，不会溢出)
                 Text(
                   project.title,
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 4),
+                // 地址行 (强制截断)
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, color: Colors.white70, size: 14),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        project.address.isNotEmpty ? project.address : "Village Area",
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        overflow: TextOverflow.ellipsis, // 超长显示省略号
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                )
               ],
             ),
           ),
 
-          // 2. 内容区域
+          // === 内容区域 ===
           Padding(
-            padding: EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 信息行：时间 & 人数
+                // 关键修复点：时间与人数行
+                // 使用 Flex 布局严格控制比例，防止任何一方溢出
                 Row(
                   children: [
-                    _iconText(Icons.access_time, project.timeline),
-                    SizedBox(width: 20),
-                    _iconText(Icons.people_outline, project.participantRange),
+                    // 左侧：时间 (占用大部分空间)
+                    Expanded(
+                      flex: 7, // 权重7
+                      child: Row(
+                        children: [
+                          Icon(Icons.access_time, size: 18, color: Colors.grey[600]),
+                          const SizedBox(width: 6),
+                          Expanded( // 内部再加 Expanded 确保文字被截断
+                            child: Text(
+                              project.timeline,
+                              style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.w500, fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // 右侧：人数 (占用小部分空间)
+                    Expanded(
+                      flex: 3, // 权重3
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end, // 靠右对齐
+                        children: [
+                          Icon(Icons.people_outline, size: 18, color: Colors.grey[600]),
+                          const SizedBox(width: 6),
+                          Flexible( // 允许文字缩小
+                            child: Text(
+                              project.participantRange,
+                              style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.w500, fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-                SizedBox(height: 15),
+                const SizedBox(height: 16),
 
                 // 技能标签
-                Text("Skills Needed", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                SizedBox(height: 5),
+                const Text("Skills Needed", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
                   children: project.skills.map((s) => Chip(
-                    label: Text(s, style: TextStyle(fontSize: 11)),
-                    backgroundColor: Colors.grey[100],
+                    label: Text(s, style: const TextStyle(fontSize: 11, color: Color(0xFF1565C0))),
+                    backgroundColor: const Color(0xFFE3F2FD),
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   )).toList(),
                 ),
 
-                SizedBox(height: 20),
-                Divider(),
-                SizedBox(height: 10),
+                const SizedBox(height: 20),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
 
-                // --- 3. 核心修改：里程碑奖励 (垂直时间轴样式) ---
-                Text("Milestones & Incentives", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                SizedBox(height: 4),
-                Text("Complete tasks to unlock rewards", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                SizedBox(height: 15),
-
-                // 遍历显示里程碑
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
-                  itemCount: project.milestones.length,
-                  itemBuilder: (context, index) {
-                    final m = project.milestones[index];
-                    final isLast = index == project.milestones.length - 1;
-
-                    return IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 左侧：时间轴线
-                          Column(
-                            children: [
-                              CircleAvatar(
-                                radius: 6,
-                                backgroundColor: Colors.teal, // 绿色圆点
-                              ),
-                              if (!isLast)
-                                Expanded(child: Container(width: 2, color: Colors.grey[200])),
-                            ],
-                          ),
-                          SizedBox(width: 15),
-
-                          // 右侧：任务详情
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 20.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text("${m.phaseName}: ${m.taskName}",
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  SizedBox(height: 4),
-
-                                  // 奖励 (Incentive) - 突出显示
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                        color: Colors.orange.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.orange.withOpacity(0.3))
-                                    ),
-                                    child: Text(
-                                      "🎁 Reward: ${m.incentive}",
-                                      style: TextStyle(color: Colors.orange[800], fontSize: 12, fontWeight: FontWeight.w600),
-                                    ),
-                                  ),
-
-                                  // 验证方式 (Verification Type)
-                                  SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                          m.verificationType == 'photo' ? Icons.camera_alt : Icons.verified_user,
-                                          size: 12, color: Colors.grey
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        m.verificationType == 'photo' ? "Requires Photo Proof" : "Verified by Leader",
-                                        style: TextStyle(fontSize: 11, color: Colors.grey),
-                                      ),
-                                    ],
-                                  )
-                                ],
-                              ),
-                            ),
-                          )
-                        ],
-                      ),
-                    );
-                  },
+                // 底部信息
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("${project.milestones.length} Milestones", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                    Text(
+                      "Earn Rewards",
+                      style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ],
                 ),
 
-                SizedBox(height: 10),
+                const SizedBox(height: 20),
+
                 // 申请按钮
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 48,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal[800],
+                      backgroundColor: const Color(0xFF1E88E5),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
                     ),
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text("Application Submitted for ${project.title}!"))
                       );
                     },
-                    child: Text("Apply for Project", style: TextStyle(color: Colors.white, fontSize: 16)),
+                    child: const Text("Apply for Project", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -246,16 +241,6 @@ class ParticipantJobBoard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _iconText(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
-        SizedBox(width: 5),
-        Text(text, style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.w500)),
-      ],
     );
   }
 }
