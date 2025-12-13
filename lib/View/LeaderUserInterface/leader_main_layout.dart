@@ -103,104 +103,170 @@ class _AIPlannerSectionState extends State<AIPlannerSection> {
   Widget build(BuildContext context) {
     final viewModel = Provider.of<PlannerViewModel>(context);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6A85B6), Color(0xFF2E7D32)], // Blueish purple to Green
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.wb_sunny_outlined, color: Colors.white, size: 32),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text("AI Resource Planner", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                          SizedBox(height: 6),
+                          Text("Tell me about your available resources, and I'll suggest the best community projects.", style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              // Quick Inputs
+              const Text("Quick Inputs:", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
+              const SizedBox(height: 16),
+
+              // 2x2 Grid Layout for Quick Inputs
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 2.5, // Adjust aspect ratio for card shape
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                children: [
+                  _quickInputCard("2 acres abandoned\nriver land"),
+                  _quickInputCard("Seasonal crop\nsurplus"),
+                  _quickInputCard("Unused community hall"),
+                  _quickInputCard("5 idle tractors"),
+                ],
+              ),
+
+              // Space for bottom text field
+              const SizedBox(height: 100),
+            ],
+          ),
+        ),
+
+        // Bottom Input Field (Floating)
+        Positioned(
+          left: 20,
+          right: 20,
+          bottom: 20,
+          child: Container(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
-                BoxShadow(color: Colors.green.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))
+                BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 5))
               ],
             ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                const Icon(Icons.auto_awesome, color: Colors.white, size: 40),
-                const SizedBox(width: 15),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text("Smart Resource Planner", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 5),
-                      Text("Input your idle resources. AI will recommend a sustainable project.", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    ],
+                  child: TextField(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      hintText: "Describe your available resources...",
+                      hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                viewModel.isLoading
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                    : GestureDetector(
+                  onTap: () async {
+                    if (_controller.text.isEmpty) return;
+                    await viewModel.generatePlan(_controller.text);
+                    if (viewModel.drafts.isNotEmpty) {
+                      widget.onGenerateSuccess();
+                      _controller.clear();
+                    }
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFA8C0B0), Color(0xFF6A8E78)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.arrow_upward, color: Colors.white),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 25),
+        ),
+      ],
+    );
+  }
 
-          const Text("What resources are available?", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
-          const SizedBox(height: 10),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            _quickInputChip("2 acres river land"),
-            _quickInputChip("Surplus Corn Seeds"),
-            _quickInputChip("Old Community Hall"),
-            _quickInputChip("Bamboo grove"),
-          ]),
-
-          const SizedBox(height: 20),
-          TextField(
-            controller: _controller,
-            maxLines: 4,
-            decoration: InputDecoration(
-              hintText: "E.g., I have 50kg of leftover fertilizer and a small plot of land near the school...",
-              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.all(16),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              icon: viewModel.isLoading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.lightbulb_outline),
-              label: Text(viewModel.isLoading ? "Analyzing Resources..." : "Get AI Recommendation"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2E7D32),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 2,
-              ),
-              onPressed: viewModel.isLoading ? null : () async {
-                if (_controller.text.isEmpty) return;
-                await viewModel.generatePlan(_controller.text);
-                if (viewModel.drafts.isNotEmpty) {
-                  widget.onGenerateSuccess();
-                  _controller.clear();
-                }
-              },
-            ),
-          ),
-          if (viewModel.error != null)
-            Padding(padding: const EdgeInsets.only(top: 10), child: Text("Error: ${viewModel.error}", style: const TextStyle(color: Colors.red))),
-        ],
+  Widget _quickInputCard(String text) {
+    return GestureDetector(
+      onTap: () {
+        // Append text to controller
+        String newText = text.replaceAll('\n', ' ');
+        if (_controller.text.isNotEmpty) {
+          _controller.text += ", $newText";
+        } else {
+          _controller.text = newText;
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500),
+        ),
       ),
     );
   }
-
-  Widget _quickInputChip(String text) {
-    return ActionChip(
-      label: Text(text, style: const TextStyle(fontSize: 12)),
-      backgroundColor: Colors.white,
-      side: BorderSide(color: Colors.grey.shade300),
-      shape: const StadiumBorder(),
-      onPressed: () => setState(() => _controller.text += "$text, "),
-    );
-  }
 }
+
 
 // --- 3. Projects Section ---
 class ProjectsSection extends StatefulWidget {
@@ -400,7 +466,8 @@ class ActiveProjectsView extends StatelessWidget {
   }
 }
 
-// --- 5. Draft View ---
+
+// --- 5. Draft View (Updated UI - Image 2) ---
 class DraftView extends StatefulWidget {
   final VoidCallback onPublish;
   const DraftView({super.key, required this.onPublish});
@@ -410,7 +477,7 @@ class DraftView extends StatefulWidget {
 }
 
 class _DraftViewState extends State<DraftView> {
-  final PageController _pageController = PageController(viewportFraction: 0.9);
+  final PageController _pageController = PageController(viewportFraction: 0.95);
 
   @override
   Widget build(BuildContext context) {
@@ -425,348 +492,277 @@ class _DraftViewState extends State<DraftView> {
           children: [
             Icon(Icons.post_add, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            const Text("No recommendations yet", style: TextStyle(fontSize: 16, color: Colors.grey)),
-            const SizedBox(height: 8),
+            const Text("Plan your projects before publishing", style: TextStyle(fontSize: 14, color: Colors.grey)),
           ],
         ),
       );
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-          child: Text("AI Recommendation (${drafts.length})", style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-        ),
+        const SizedBox(height: 16),
+        const Text("Plan your projects before publishing", style: TextStyle(color: Colors.grey, fontSize: 12)),
+        const SizedBox(height: 16),
         Expanded(
           child: PageView.builder(
             controller: _pageController,
             itemCount: drafts.length,
             itemBuilder: (context, index) {
               final draft = drafts[drafts.length - 1 - index];
-              return _buildDraftCard(context, viewModel, draft, drafts.length - 1 - index);
+              return _buildDraftPage(context, viewModel, draft, drafts.length - 1 - index);
             },
           ),
         ),
-        const SizedBox(height: 20),
       ],
     );
   }
 
-  Widget _buildDraftCard(BuildContext context, PlannerViewModel viewModel, Project draft, int index) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
-        ],
-      ),
+  Widget _buildDraftPage(BuildContext context, PlannerViewModel viewModel, Project draft, int index) {
+    return SingleChildScrollView(
       child: Column(
         children: [
+          // --- Main Project Info Card ---
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: Color(0xFFE8F5E9),
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
+              ],
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header Gradient
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: const Color(0xFF2E7D32), borderRadius: BorderRadius.circular(4)),
-                  child: const Text("Recommendation", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF7986CB), Color(0xFF2E7D32)], // Purple to Greenish
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          _tag("Draft", Colors.white.withOpacity(0.2)),
+                          const SizedBox(width: 8),
+                          _tag("AI Generated", Colors.white.withOpacity(0.2)),
+                          const Spacer(),
+                          const Icon(Icons.edit, color: Colors.white),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        draft.title,
+                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                 ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                  onPressed: () => viewModel.removeDraft(index),
-                )
+
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _sectionTitle("Timeline"),
+                      Text(draft.timeline, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+
+                      const SizedBox(height: 16),
+                      _sectionTitle("Required Skills"),
+                      Wrap(
+                        spacing: 8,
+                        children: draft.skills.map((s) => Chip(
+                          label: Text(s, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                          backgroundColor: const Color(0xFF2E7D32),
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                        )).toList(),
+                      ),
+
+                      const SizedBox(height: 16),
+                      _sectionTitle("Youth Participants Needed"),
+                      Text(draft.participantRange, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+
+                      const SizedBox(height: 16),
+                      _sectionTitle("Starting Materials"), // New Section
+                      // Combine user input and AI additions logic is handled in AI service, here we just display
+                      Text(
+                        draft.startingResources.join(", "),
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+
+                      const SizedBox(height: 16),
+                      _sectionTitle("Address"), // New Section
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Expanded(child: Text(draft.address, style: const TextStyle(fontSize: 13, color: Colors.black87))),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+                      _sectionTitle("Project Description"),
+                      Text(draft.description, style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w500)),
+
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            await viewModel.publishDraft(index);
+                            widget.onPublish();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2E7D32),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text("Publish to Job Board", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                      )
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
 
+          const SizedBox(height: 24),
+
+          // --- Task Milestones (Outside Card) ---
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Task Milestones", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: draft.milestones.length,
+                  itemBuilder: (context, mIndex) {
+                    final milestone = draft.milestones[mIndex];
+                    final isLast = mIndex == draft.milestones.length - 1;
+                    return _buildTimelineItem(context, milestone, isLast);
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineItem(BuildContext context, Milestone milestone, bool isLast) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Timeline Line & Dot
+          Column(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300, // Grey for Draft status
+                  shape: BoxShape.circle,
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 16),
+
+          // Content
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(draft.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
-                  const SizedBox(height: 10),
-                  Text(draft.description, style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.5)),
-
-                  const SizedBox(height: 20),
-                  const Divider(),
-
-                  _infoRow("Timeline", draft.timeline, Icons.calendar_today),
-                  const SizedBox(height: 10),
-                  _infoRow("Target Youth", draft.participantRange, Icons.people_outline),
-
-                  const SizedBox(height: 20),
-                  const Text("Proposed Milestones & Rewards", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 10),
-                  ...draft.milestones.map((m) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.star_outline, size: 16, color: Colors.orange),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text("${m.phaseName}: ${m.taskName}\nReward: ${m.incentive}", style: const TextStyle(fontSize: 12))),
-                      ],
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 24.0),
+              child: InkWell(
+                onTap: () {
+                  // Show details dialog
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Text(milestone.taskName),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Phase: ${milestone.phaseName}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 10),
+                          const Text("Description:", style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(milestone.description),
+                          const SizedBox(height: 10),
+                          const Text("Incentive:", style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(milestone.incentive, style: const TextStyle(color: Colors.orange)),
+                        ],
+                      ),
+                      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close"))],
                     ),
-                  )),
-                ],
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEEEEE), // Light grey bg for milestone item
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "${milestone.phaseName}: ${milestone.taskName}",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Incentive: ${milestone.incentive}", // Fixed "Indicated" typo
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => EditProjectScreen(draftIndex: index)));
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black,
-                      side: BorderSide(color: Colors.grey.shade300),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text("Edit Plan"),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await viewModel.publishDraft(index);
-                      widget.onPublish();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      elevation: 0,
-                    ),
-                    child: const Text("Approve & Publish"),
-                  ),
-                ),
-              ],
-            ),
-          )
         ],
       ),
     );
   }
 
-  Widget _infoRow(String label, String value, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey),
-        const SizedBox(width: 8),
-        Text("$label: ", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-}
-
-// --- 6. Edit Project Screen ---
-class EditProjectScreen extends StatefulWidget {
-  final int draftIndex;
-  const EditProjectScreen({super.key, required this.draftIndex});
-
-  @override
-  State<EditProjectScreen> createState() => _EditProjectScreenState();
-}
-
-class _EditProjectScreenState extends State<EditProjectScreen> {
-  late TextEditingController _titleController;
-  late TextEditingController _timelineController;
-  late TextEditingController _skillsController;
-  late TextEditingController _participantsController;
-  late TextEditingController _descController;
-  late List<Milestone> _tempMilestones;
-
-  @override
-  void initState() {
-    super.initState();
-    final draft = Provider.of<PlannerViewModel>(context, listen: false).drafts[widget.draftIndex];
-
-    _titleController = TextEditingController(text: draft.title);
-    _timelineController = TextEditingController(text: draft.timeline);
-    _skillsController = TextEditingController(text: draft.skills.join(", "));
-    _participantsController = TextEditingController(text: draft.participantRange);
-    _descController = TextEditingController(text: draft.description);
-    _tempMilestones = List.from(draft.milestones);
-  }
-
-  void _showMilestoneDialog({int? index}) {
-    final isEditing = index != null;
-    final m = isEditing ? _tempMilestones[index] : null;
-
-    final phaseController = TextEditingController(text: m?.phaseName ?? "");
-    final taskController = TextEditingController(text: m?.taskName ?? "");
-    final incentiveController = TextEditingController(text: m?.incentive ?? "");
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isEditing ? "Edit Milestone" : "Add Milestone"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: phaseController, decoration: const InputDecoration(labelText: "Phase (e.g. Phase 1)")),
-              TextField(controller: taskController, decoration: const InputDecoration(labelText: "Task Name")),
-              TextField(controller: incentiveController, decoration: const InputDecoration(labelText: "Incentive (e.g. Seeds)")),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () {
-              final newMilestone = Milestone(
-                phaseName: phaseController.text,
-                taskName: taskController.text,
-                incentive: incentiveController.text,
-                verificationType: 'leader',
-              );
-
-              setState(() {
-                if (isEditing) {
-                  _tempMilestones[index] = newMilestone;
-                } else {
-                  _tempMilestones.add(newMilestone);
-                }
-              });
-              Navigator.pop(context);
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
+  Widget _tag(String text, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10)),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final viewModel = Provider.of<PlannerViewModel>(context, listen: false);
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Edit Proposal", style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: ListView(
-          children: [
-            _inputField("Project Title *", _titleController),
-            _inputField("Timeline", _timelineController),
-            _inputField("Required Skills", _skillsController),
-            _inputField("Youth Participants", _participantsController),
-            _inputField("Description *", _descController, maxLines: 5),
-
-            const SizedBox(height: 20),
-            const Divider(),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Milestones & Incentives", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                TextButton.icon(
-                  icon: const Icon(Icons.add_circle_outline, size: 18),
-                  label: const Text("Add"),
-                  onPressed: () => _showMilestoneDialog(),
-                ),
-              ],
-            ),
-
-            if (_tempMilestones.isEmpty)
-              const Padding(padding: EdgeInsets.all(10), child: Text("No milestones yet.", style: TextStyle(color: Colors.grey))),
-
-            ..._tempMilestones.asMap().entries.map((entry) {
-              int idx = entry.key;
-              Milestone m = entry.value;
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.emoji_events_outlined, color: Colors.orange),
-                title: Text(m.taskName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: Text("Reward: ${m.incentive}"),
-                trailing: IconButton(
-                  icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
-                  onPressed: () => _showMilestoneDialog(index: idx),
-                ),
-              );
-            }),
-
-            const SizedBox(height: 30),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
-                    child: const Text("Cancel"),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                    ),
-                    onPressed: () {
-                      viewModel.updateDraft(
-                        widget.draftIndex,
-                        title: _titleController.text,
-                        description: _descController.text,
-                        milestones: _tempMilestones,
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: const Text("Save Changes"),
-                  ),
-                ),
-              ],
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _inputField(String label, TextEditingController controller, {int maxLines = 1}) {
+  Widget _sectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 15.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[700])),
-          const SizedBox(height: 5),
-          TextField(
-            controller: controller,
-            maxLines: maxLines,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            ),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.only(bottom: 4.0),
+      child: Text(title, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
     );
   }
 }
