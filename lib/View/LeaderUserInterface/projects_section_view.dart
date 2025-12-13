@@ -9,7 +9,7 @@ import '../../models/project_model.dart';
 import '../../models/application_model.dart';
 import '../../models/DatabaseService/database_service.dart';
 import 'applicant_profile_view.dart';
-import 'hired_youth_list_view.dart'; // Import Hired List View
+import 'hired_youth_list_view.dart';
 
 class ProjectsSection extends StatefulWidget {
   const ProjectsSection({super.key});
@@ -154,8 +154,13 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 
   Widget _buildActiveCard(BuildContext context, Project project) {
+    bool hasPendingReview = project.milestones.any((m) => m.isPendingReview);
+
+    // Check if project has started (is any milestone open or completed?)
+    bool isProjectStarted = project.milestones.any((m) => m.isOpen || m.isCompleted || m.isPendingReview);
+
     return GestureDetector(
-      onTap: () => _showActiveProjectDetails(context, project),
+      onTap: () => _showActiveProjectDetails(context, project, isProjectStarted),
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
@@ -183,7 +188,18 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                     decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
                     child: const Text("Active", style: TextStyle(color: Colors.white, fontSize: 10)),
                   ),
-                  const Icon(Icons.visibility, color: Colors.white, size: 20)
+                  if (hasPendingReview)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(8)),
+                      child: const Text("REVIEW NEEDED", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    )
+                  else if (!isProjectStarted)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(8)),
+                      child: const Text("NOT STARTED", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
                 ],
               ),
             ),
@@ -205,8 +221,6 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                       Text("${project.milestones.length} Milestones"),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  const Text("Tap to view applications & progress", style: TextStyle(fontSize: 12, color: Colors.blue)),
                 ],
               ),
             )
@@ -216,7 +230,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
     );
   }
 
-  void _showActiveProjectDetails(BuildContext context, Project project) {
+  void _showActiveProjectDetails(BuildContext context, Project project, bool isProjectStarted) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -244,7 +258,6 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                   Expanded(
                     child: Text(project.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   ),
-                  // NEW: Button to view Hired Team
                   IconButton(
                     onPressed: () {
                       Navigator.push(
@@ -268,7 +281,46 @@ class _ProjectsSectionState extends State<ProjectsSection> {
               if (project.id != null)
                 _buildPendingApplicationsSection(context, project.id!),
 
-              const Divider(height: 40),
+              const Divider(height: 30),
+
+              if (!isProjectStarted)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.purple[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.purple.shade100),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text("Project Not Started", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple)),
+                      const Text("Participants cannot submit work until you unlock Phase 1.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text("Start Project Now"),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+                        onPressed: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          try {
+                            await DatabaseService().startProject(project.id!);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              messenger.showSnackBar(const SnackBar(content: Text("Project Started! Phase 1 Unlocked.")));
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+                            }
+                          }
+                        },
+                      )
+                    ],
+                  ),
+                ),
+
               const Text("Milestones Progress", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
 
@@ -276,15 +328,30 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                 child: ListView(
                   controller: scrollController,
                   children: project.milestones.asMap().entries.map((entry) {
+                    var index = entry.key;
                     var m = entry.value;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(m.isCompleted ? Icons.check_circle : Icons.circle_outlined, color: m.isCompleted ? Colors.green : Colors.grey),
-                        title: Text(m.taskName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text("Allocated: RM ${m.allocatedBudget}"),
-                      ),
+
+                    bool isNextLocked = index + 1 < project.milestones.length && project.milestones[index+1].isLocked;
+                    bool canUnlockNext = m.isCompleted && isNextLocked;
+
+                    return Column(
+                      children: [
+                        _buildLeaderMilestoneReviewTile(context, project, index, m),
+                        if (canUnlockNext)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: ElevatedButton.icon(
+                              onPressed: () => _showUnlockConfirmation(context, project, index),
+                              icon: const Icon(Icons.lock_open, size: 16),
+                              label: const Text("Unlock Next Phase"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2E7D32),
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(double.infinity, 36),
+                              ),
+                            ),
+                          )
+                      ],
                     );
                   }).toList(),
                 ),
@@ -298,6 +365,155 @@ class _ProjectsSectionState extends State<ProjectsSection> {
     );
   }
 
+  // --- SAFE CONFIRMATION DIALOG ---
+  void _showUnlockConfirmation(BuildContext context, Project project, int index) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Unlock Next Phase?"),
+        content: const Text("Are you sure you want to proceed? This will allow all participants to start working on the next milestone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              // CRITICAL: Capture context before async calls
+              final messenger = ScaffoldMessenger.of(context);
+              Navigator.pop(ctx);
+
+              try {
+                await DatabaseService().unlockNextPhase(project.id!, index);
+                messenger.showSnackBar(const SnackBar(content: Text("Next Phase Unlocked!"), backgroundColor: Colors.green));
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            child: const Text("Confirm & Unlock"),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeaderMilestoneReviewTile(BuildContext context, Project project, int index, Milestone m) {
+    Color color = Colors.grey;
+    IconData icon = Icons.circle_outlined;
+    bool needsReview = false;
+
+    if (m.isCompleted) {
+      color = Colors.green;
+      icon = Icons.check_circle;
+    } else if (m.isPendingReview) {
+      color = Colors.orange;
+      icon = Icons.hourglass_full;
+      needsReview = true;
+    } else if (m.isOpen) {
+      color = Colors.blue;
+      icon = Icons.play_circle_outline;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: needsReview ? BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)) : null,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        leading: Icon(icon, color: color),
+        title: Text(m.taskName, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Allocated: RM ${m.allocatedBudget}"),
+            if (m.isPendingReview)
+              Text("Claimed: RM ${m.expenseClaimed}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+            if (m.isOpen)
+              const Text("IN PROGRESS", style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold))
+          ],
+        ),
+        trailing: needsReview
+            ? ElevatedButton(
+          onPressed: () => _showReviewDialog(context, project, index, m),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white, textStyle: const TextStyle(fontSize: 12)),
+          child: const Text("Review"),
+        )
+            : null,
+      ),
+    );
+  }
+
+  // --- SAFE REVIEW DIALOG ---
+  void _showReviewDialog(BuildContext context, Project project, int index, Milestone m) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Review: ${m.taskName}"),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 150,
+                width: double.infinity,
+                color: Colors.grey[300],
+                child: const Center(child: Text("Proof Photo (Mock)", style: TextStyle(color: Colors.black54))),
+              ),
+              const SizedBox(height: 16),
+              Text("Claimed Expenses: RM ${m.expenseClaimed}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text("Allocated Budget: RM 300", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const SizedBox(height: 20),
+              const Text("If rejecting, please state reason:", style: TextStyle(fontSize: 12)),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(hintText: "Reason for rejection..."),
+              )
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              if (reasonController.text.isEmpty) {
+                // We can use context here safely because we haven't popped yet
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a reason for rejection.")));
+                return;
+              }
+              // CRITICAL: Capture context before async gap
+              final messenger = ScaffoldMessenger.of(context);
+              Navigator.pop(ctx);
+
+              try {
+                await DatabaseService().rejectMilestone(project.id!, index, reasonController.text);
+                messenger.showSnackBar(const SnackBar(content: Text("Submission Rejected."), backgroundColor: Colors.red));
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+              }
+            },
+            child: const Text("Reject", style: TextStyle(color: Colors.red)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // CRITICAL: Capture context before async gap
+              final messenger = ScaffoldMessenger.of(context);
+              Navigator.pop(ctx);
+
+              try {
+                await DatabaseService().approveMilestone(project.id!, index);
+                messenger.showSnackBar(const SnackBar(content: Text("Submission Approved."), backgroundColor: Colors.green));
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text("Approve Submission", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ... (Keep existing _buildPendingApplicationsSection and DraftInlineEditorCard classes as they are)
   Widget _buildPendingApplicationsSection(BuildContext context, String projectId) {
     final appViewModel = Provider.of<ApplicationViewModel>(context, listen: false);
 
@@ -381,7 +597,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 }
 
-// --- DRAFT INLINE EDITOR CARD (Included for completeness) ---
+// ... DraftInlineEditorCard (Same as before)
 class DraftInlineEditorCard extends StatefulWidget {
   final Project project;
   final VoidCallback onPublish;

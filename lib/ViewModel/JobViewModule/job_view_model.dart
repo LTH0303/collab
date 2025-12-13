@@ -56,24 +56,31 @@ class JobViewModel extends ChangeNotifier {
     }
   }
 
-  // --- Submit Milestone Logic (Existing) ---
+  // --- UPDATED Submit Milestone Logic ---
+  // Replaced the old boolean logic with the new status string logic
   Future<void> submitMilestoneExpense(Project project, int milestoneIndex, String amount) async {
-    // ... existing implementation ...
     try {
-      project.milestones[milestoneIndex].expenseClaimed = amount;
-      project.milestones[milestoneIndex].isCompleted = true;
+      if (project.id == null) return;
 
-      if (project.id != null) {
-        await FirebaseFirestore.instance
-            .collection('projects')
-            .doc(project.id)
-            .update({
-          'milestones': project.milestones.map((m) => m.toJson()).toList(),
-        });
+      // Use the new method in DatabaseService
+      // Passing a mock photo URL for now as requested
+      await _dbService.submitMilestone(
+          project.id!,
+          milestoneIndex,
+          amount,
+          "https://via.placeholder.com/150" // Mock photo URL
+      );
+
+      // Optimistic UI Update (optional, helps UI feel faster)
+      if (milestoneIndex < project.milestones.length) {
+        project.milestones[milestoneIndex].expenseClaimed = amount;
+        project.milestones[milestoneIndex].status = 'pending_review';
       }
+
       notifyListeners();
     } catch (e) {
       print("Error submitting: $e");
+      // You can expose an error state here if you want the UI to show a snackbar
     }
   }
 }

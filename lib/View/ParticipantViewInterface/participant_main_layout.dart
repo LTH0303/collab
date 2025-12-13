@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'participant_job_list_screen.dart';
+import 'participant_my_tasks_page.dart'; // Import the new page
 
 class ParticipantMainLayout extends StatefulWidget {
   const ParticipantMainLayout({super.key});
@@ -14,9 +15,9 @@ class _ParticipantMainLayoutState extends State<ParticipantMainLayout> {
   int _currentIndex = 0;
 
   final List<Widget> _pages = [
-    const ParticipantJobBoard(), // "Find Jobs"
-    const Center(child: Text("My Tasks (Coming Soon)")), // Placeholder for My Tasks
-    const Center(child: Text("Community (Coming Soon)")), // Placeholder for Community
+    const ParticipantJobBoard(),
+    const ParticipantMyTasksPage(), // Use the actual page now
+    const Center(child: Text("Community (Coming Soon)")),
   ];
 
   @override
@@ -26,7 +27,7 @@ class _ParticipantMainLayoutState extends State<ParticipantMainLayout> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: const Color(0xFF2E5B3E), // Dark Green
+        selectedItemColor: const Color(0xFF2E5B3E),
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: const [

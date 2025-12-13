@@ -12,7 +12,8 @@ class Project {
   List<String> startingResources;
   String address;
   String totalBudget;
-  String? leaderId; // Added
+  String? leaderId;
+  List<String> activeParticipants; // List of User IDs
 
   Project({
     this.id,
@@ -27,6 +28,7 @@ class Project {
     this.address = '',
     this.totalBudget = '0',
     this.leaderId,
+    this.activeParticipants = const [],
   });
 
   factory Project.fromJson(Map<String, dynamic> json, {String? docId}) {
@@ -42,6 +44,7 @@ class Project {
       address: json['address'] ?? '',
       totalBudget: json['total_budget']?.toString() ?? '0',
       leaderId: json['leader_id'],
+      activeParticipants: List<String>.from(json['active_participants'] ?? []),
       milestones: (json['milestones'] as List? ?? [])
           .map((m) => Milestone.fromJson(m))
           .toList(),
@@ -60,6 +63,7 @@ class Project {
       'address': address,
       'total_budget': totalBudget,
       'leader_id': leaderId,
+      'active_participants': activeParticipants,
       'milestones': milestones.map((m) => m.toJson()).toList(),
       'created_at': DateTime.now().toIso8601String(),
     };
@@ -73,8 +77,12 @@ class Milestone {
   String incentive;
   String description;
   String allocatedBudget;
+
+  // Submission & Review Fields
   String expenseClaimed;
-  bool isCompleted;
+  String? proofImageUrl; // URL for photo
+  String status; // 'locked', 'open', 'pending_review', 'completed', 'rejected'
+  String? rejectionReason;
 
   Milestone({
     required this.phaseName,
@@ -84,7 +92,9 @@ class Milestone {
     this.description = '',
     this.allocatedBudget = '0',
     this.expenseClaimed = '0',
-    this.isCompleted = false,
+    this.proofImageUrl,
+    this.status = 'locked',
+    this.rejectionReason,
   });
 
   factory Milestone.fromJson(Map<String, dynamic> json) {
@@ -96,7 +106,9 @@ class Milestone {
       description: json['description'] ?? 'Perform the task according to village guidelines.',
       allocatedBudget: json['allocated_budget']?.toString() ?? '0',
       expenseClaimed: json['expense_claimed']?.toString() ?? '0',
-      isCompleted: json['is_completed'] ?? false,
+      proofImageUrl: json['proof_image_url'],
+      status: json['status'] ?? 'locked',
+      rejectionReason: json['rejection_reason'],
     );
   }
 
@@ -108,6 +120,15 @@ class Milestone {
     'description': description,
     'allocated_budget': allocatedBudget,
     'expense_claimed': expenseClaimed,
-    'is_completed': isCompleted,
+    'proof_image_url': proofImageUrl,
+    'status': status,
+    'rejection_reason': rejectionReason,
   };
+
+  // Helper for UI
+  bool get isCompleted => status == 'completed';
+  bool get isPendingReview => status == 'pending_review';
+  bool get isRejected => status == 'rejected';
+  bool get isOpen => status == 'open';
+  bool get isLocked => status == 'locked';
 }
