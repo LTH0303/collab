@@ -1,17 +1,17 @@
-// lib/viewmodels/PlannerViewModel/planner_view_model.dart
+// lib/ViewModel/PlannerViewModel/planner_view_model.dart
 
 import 'package:flutter/material.dart';
-import '../../models/ProjectRepository/project_repository.dart';
+import '../../models/ProjectRepository/i_project_repository.dart'; // 依赖接口
 import '../../models/project_model.dart';
 
 class PlannerViewModel extends ChangeNotifier {
-  final ProjectRepository _repository;
+  // 依赖抽象接口，而不是具体类
+  // 这使得 ViewModel 更容易进行单元测试（可以注入 MockRepository）
+  final IProjectRepository _repository;
 
   PlannerViewModel(this._repository);
 
-  // 🔴 关键修改：将单一 Draft 改为 List，支持存放多个方案
   final List<Project> _drafts = [];
-
   bool _isLoading = false;
   String? _error;
 
@@ -19,15 +19,16 @@ class PlannerViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // ACTION: 生成方案 (会添加到 Drafts 列表的末尾)
+  // ACTION: 生成方案
   Future<void> generatePlan(String resources) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
+      // ViewModel 不关心数据是来自 Gemini 还是其他 AI，只管调用接口
       Project newDraft = await _repository.getAIRecommendation(resources);
-      _drafts.add(newDraft); // 追加到列表
+      _drafts.add(newDraft);
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -40,8 +41,7 @@ class PlannerViewModel extends ChangeNotifier {
   void updateDraft(int index, {String? title, String? description, List<Milestone>? milestones}) {
     if (index >= 0 && index < _drafts.length) {
       final oldDraft = _drafts[index];
-      // 创建一个新的 Project 对象以触发更新（或者直接修改属性，但在 Dart 中如果 Project 是 final 字段较多推荐 copyWith 模式）
-      // 假设 Project 类没有 copyWith，直接修改属性：
+      // 简单的状态更新
       if (title != null) oldDraft.title = title;
       if (description != null) oldDraft.description = description;
       if (milestones != null) oldDraft.milestones = milestones;
@@ -67,9 +67,10 @@ class PlannerViewModel extends ChangeNotifier {
 
     try {
       final draftToPublish = _drafts[index];
+      // 调用接口方法
       await _repository.publishProject(draftToPublish);
 
-      // 发布成功后，从 Draft 列表中移除
+      // 发布成功后移除草稿
       _drafts.removeAt(index);
     } catch (e) {
       _error = "Publish failed: $e";
