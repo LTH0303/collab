@@ -10,9 +10,15 @@ import '../CommunityRepository/post_model.dart';
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  // --- USER PROFILE MANAGEMENT ---
+
+  // NEW: Update User Profile (Name, Phone, Location, Skills)
+  Future<void> updateUserProfile(String userId, Map<String, dynamic> data) async {
+    await _db.collection('users').doc(userId).update(data);
+  }
+
   // --- SCORE MANAGEMENT ---
 
-  // UPDATED: Now accepts reason and projectTitle for history logging
   Future<void> _updateReliabilityScore(String userId, int change, String reason, {String? projectTitle}) async {
     final userRef = _db.collection('users').doc(userId);
 
@@ -258,7 +264,7 @@ class DatabaseService {
           'milestones': milestones.map((m) => m.toJson()).toList()
         });
 
-        // Update Score with specific reason
+        // Update Score
         if (isApproved) {
           await _updateReliabilityScore(submissionUserId, 10, "Verified Success", projectTitle: projectTitle);
         } else {
@@ -297,7 +303,6 @@ class DatabaseService {
     }
   }
 
-  // ... (Other) ...
   Future<void> addApplication(Application app) async {
     await _db.collection('applications').add(app.toJson());
   }

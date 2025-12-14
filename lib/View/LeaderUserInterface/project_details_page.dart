@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/ProjectDetailsViewModel/project_details_view_model.dart';
 import '../../models/ProjectRepository/project_model.dart';
+import 'hired_youth_list_view.dart'; // Import HiredYouthListView
 
 class ProjectDetailsPage extends StatefulWidget {
   final Project project;
@@ -43,6 +44,30 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           widget.project.title,
           style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
+        // --- ADDED: Hired Team Button ---
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.people_alt_outlined, color: Colors.black),
+            tooltip: "View Hired Team",
+            onPressed: () {
+              if (widget.project.id != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => HiredYouthListView(
+                      projectId: widget.project.id!,
+                      projectTitle: widget.project.title,
+                    ),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Cannot view team: Project ID missing")),
+                );
+              }
+            },
+          ),
+        ],
       ),
       body: Consumer<ProjectDetailsViewModel>(
         builder: (context, viewModel, _) {
@@ -306,8 +331,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  // --- KPI & Actions Sections ---
-
   Widget _buildLiveKPIs(ProjectDetailsViewModel viewModel, Project project) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,7 +397,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     bool isCompleted = viewModel.isProjectCompleted;
     bool isStillActive = project.status == 'active';
 
-    // Show "Close Project" button if all milestones are done but status is still active (Fix for stuck projects)
     bool showForceClose = isCompleted && isStillActive;
 
     return Column(
@@ -449,8 +471,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       ],
     );
   }
-
-  // --- Dialogs ---
 
   void _showCompleteMilestoneDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex) {
     final milestone = viewModel.project?.milestones[milestoneIndex];

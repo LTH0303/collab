@@ -3,11 +3,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../models/DatabaseService/database_service.dart';
 import '../Authentication/login_page.dart';
 
-// ===========================================================================
-// 1. DATA MODEL (User Profile)
-// ===========================================================================
+// ... (UserProfile class remains same)
 class UserProfile {
   String name;
   String location;
@@ -37,10 +36,7 @@ class UserProfile {
   }
 }
 
-// ===========================================================================
-// 2. STRATEGY PATTERN CLASSES
-// ===========================================================================
-
+// ... (Strategy classes remain same)
 abstract class ReliabilityStrategy {
   String get label;
   Color get primaryColor;
@@ -88,10 +84,7 @@ class LowReliabilityStrategy implements ReliabilityStrategy {
   IconData get icon => Icons.warning_amber_rounded;
 }
 
-// ===========================================================================
-// 3. PARTICIPANT PROFILE PAGE
-// ===========================================================================
-
+// ... (ParticipantProfilePage remains same)
 class ParticipantProfilePage extends StatelessWidget {
   const ParticipantProfilePage({super.key});
 
@@ -118,6 +111,32 @@ class ParticipantProfilePage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || !snapshot.data!.exists) {
+                return const SizedBox();
+              }
+              final userProfile = UserProfile.fromMap(snapshot.data!.data() as Map<String, dynamic>);
+
+              return IconButton(
+                icon: const Icon(Icons.edit_outlined, color: Colors.black),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EditProfilePage(
+                        currentProfile: userProfile,
+                        userId: user.uid,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
@@ -182,7 +201,6 @@ class ParticipantProfilePage extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // --- SCORE BUTTON ---
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -202,7 +220,7 @@ class ParticipantProfilePage extends StatelessWidget {
                             builder: (context) => ReliabilityStatsPage(
                               score: userProfile.reliabilityScore,
                               strategy: strategy,
-                              userId: user.uid, // Pass USER ID here
+                              userId: user.uid,
                             ),
                           ),
                         );
@@ -322,23 +340,14 @@ class ParticipantProfilePage extends StatelessWidget {
     return Container(
       width: 100,
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          const SizedBox(height: 4),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        ],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Column(children: [
+        Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: color, size: 24)),
+        const SizedBox(height: 12),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        const SizedBox(height: 4),
+        Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ]),
     );
   }
 
@@ -346,64 +355,205 @@ class ParticipantProfilePage extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 16),
-          ...children,
-        ],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 16),
+        ...children,
+      ]),
     );
   }
 
   Widget _buildListTile(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: Colors.grey[600], size: 20),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
-      ),
-    );
+    return Padding(padding: const EdgeInsets.symmetric(vertical: 8.0), child: Row(children: [
+      Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: Colors.grey[600], size: 20)),
+      const SizedBox(width: 16),
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+      ]),
+    ]));
   }
 
   Widget _buildSkillChip(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE3F2FD),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFE3F2FD), borderRadius: BorderRadius.circular(20)),
       child: Text(label, style: const TextStyle(color: Color(0xFF1565C0), fontSize: 12, fontWeight: FontWeight.bold)),
     );
   }
 }
 
+// ... (EditProfilePage remains the same)
+class EditProfilePage extends StatefulWidget {
+  final UserProfile currentProfile;
+  final String userId;
+
+  const EditProfilePage({super.key, required this.currentProfile, required this.userId});
+
+  @override
+  State<EditProfilePage> createState() => _EditProfilePageState();
+}
+
+class _EditProfilePageState extends State<EditProfilePage> {
+  final _formKey = GlobalKey<FormState>();
+
+  late TextEditingController _nameController;
+  late TextEditingController _locationController;
+  late TextEditingController _emailController;
+  late TextEditingController _phoneController;
+  Set<String> _selectedSkills = {};
+
+  final List<String> _commonSkills = [
+    "Farming", "Agriculture", "Driving", "Carpentry",
+    "Plumbing", "Electrical", "Cooking", "Sewing",
+    "Construction", "Welding", "Painting", "Gardening",
+    "Computer Basics", "Accounting", "Teaching"
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.currentProfile.name);
+    _locationController = TextEditingController(text: widget.currentProfile.location);
+    _emailController = TextEditingController(text: widget.currentProfile.email);
+    _phoneController = TextEditingController(text: widget.currentProfile.phone);
+    _selectedSkills = Set.from(widget.currentProfile.skills);
+  }
+
+  void _toggleSkill(String skill) {
+    setState(() {
+      if (_selectedSkills.contains(skill)) {
+        _selectedSkills.remove(skill);
+      } else {
+        _selectedSkills.add(skill);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("Edit Profile", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              if (_formKey.currentState!.validate()) {
+                final messenger = ScaffoldMessenger.of(context);
+
+                Map<String, dynamic> data = {
+                  'name': _nameController.text,
+                  'village': _locationController.text,
+                  'email': _emailController.text,
+                  'phone': _phoneController.text,
+                  'skills': _selectedSkills.toList(),
+                };
+
+                await DatabaseService().updateUserProfile(widget.userId, data);
+
+                messenger.showSnackBar(const SnackBar(content: Text("Profile Updated!")));
+                if (mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          )
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionTitle("Personal Details"),
+              _buildTextField("Full Name", _nameController, Icons.person),
+              _buildTextField("Location", _locationController, Icons.location_on),
+
+              const SizedBox(height: 24),
+              _buildSectionTitle("Contact Info"),
+              _buildTextField("Email", _emailController, Icons.email),
+              _buildTextField("Phone", _phoneController, Icons.phone),
+
+              const SizedBox(height: 24),
+              _buildSectionTitle("Skills"),
+              const Text("Tap to select your skills:", style: TextStyle(fontSize: 14, color: Colors.grey)),
+              const SizedBox(height: 12),
+
+              Wrap(
+                spacing: 8.0,
+                runSpacing: 8.0,
+                children: _commonSkills.map((skill) {
+                  final isSelected = _selectedSkills.contains(skill);
+                  return FilterChip(
+                    label: Text(skill),
+                    selected: isSelected,
+                    onSelected: (bool selected) {
+                      _toggleSkill(skill);
+                    },
+                    selectedColor: const Color(0xFFE3F2FD),
+                    checkmarkColor: const Color(0xFF1565C0),
+                    labelStyle: TextStyle(
+                      color: isSelected ? const Color(0xFF1565C0) : Colors.black87,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                    backgroundColor: Colors.grey[100],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: isSelected ? const Color(0xFF1565C0) : Colors.transparent,
+                        width: 1,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(padding: const EdgeInsets.only(bottom: 16), child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)));
+  }
+
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {int maxLines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: controller,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, color: Colors.grey),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+          fillColor: Colors.grey[50],
+        ),
+        validator: (value) => value!.isEmpty ? "Required" : null,
+      ),
+    );
+  }
+}
+
 // ===========================================================================
-// 4. RELIABILITY STATS SCREEN
+// 5. RELIABILITY STATS SCREEN (UPDATED)
 // ===========================================================================
 
 class ReliabilityStatsPage extends StatelessWidget {
   final int score;
   final ReliabilityStrategy strategy;
-  final String userId; // Added User ID to fetch history
+  final String userId;
 
   const ReliabilityStatsPage({
     super.key,
@@ -425,146 +575,169 @@ class ReliabilityStatsPage extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 180,
-                    height: 180,
-                    child: CircularProgressIndicator(
-                      value: score / 100,
-                      strokeWidth: 15,
-                      backgroundColor: Colors.grey[200],
-                      valueColor: AlwaysStoppedAnimation<Color>(strategy.barColor),
-                    ),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
+      // Use StreamBuilder to get real-time history AND calculate breakdown
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('reliability_history')
+            .orderBy('timestamp', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final docs = snapshot.data?.docs ?? [];
+
+          // --- CALCULATE BREAKDOWN ---
+          int successCount = 0;
+          int penaltyCount = 0;
+          int noShowCount = 0;
+
+          for (var doc in docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final change = data['change'] as int? ?? 0;
+
+            if (change == 10) successCount++;
+            else if (change == -5) penaltyCount++;
+            else if (change == -20) noShowCount++;
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                Center(
+                  child: Stack(
+                    alignment: Alignment.center,
                     children: [
-                      Text(
-                        "$score",
-                        style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: strategy.primaryColor),
+                      SizedBox(
+                        width: 180,
+                        height: 180,
+                        child: CircularProgressIndicator(
+                          value: score / 100,
+                          strokeWidth: 15,
+                          backgroundColor: Colors.grey[200],
+                          valueColor: AlwaysStoppedAnimation<Color>(strategy.barColor),
+                        ),
                       ),
-                      const Text("Total Score", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            "$score",
+                            style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: strategy.primaryColor),
+                          ),
+                          const Text("Total Score", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 30),
+                ),
+                const SizedBox(height: 30),
 
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: strategy.backgroundColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: strategy.primaryColor.withOpacity(0.2)),
-              ),
-              child: Column(
-                children: [
-                  Icon(strategy.icon, size: 32, color: strategy.primaryColor),
-                  const SizedBox(height: 8),
-                  Text(
-                    strategy.label,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: strategy.primaryColor),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: strategy.backgroundColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: strategy.primaryColor.withOpacity(0.2)),
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    "This score reflects your reliability based on leader approvals and job attendance.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black54, fontSize: 12),
+                  child: Column(
+                    children: [
+                      Icon(strategy.icon, size: 32, color: strategy.primaryColor),
+                      const SizedBox(height: 8),
+                      Text(
+                        strategy.label,
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: strategy.primaryColor),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        "This score reflects your reliability based on leader approvals and job attendance.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.black54, fontSize: 12),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 30),
+                ),
+                const SizedBox(height: 30),
 
-            // --- REAL-TIME HISTORY SECTION ---
-            const Align(alignment: Alignment.centerLeft, child: Text("History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            const SizedBox(height: 16),
-
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(userId)
-                  .collection('reliability_history')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                    child: const Center(child: Text("No history available yet.", style: TextStyle(color: Colors.grey))),
-                  );
-                }
-
-                return Container(
+                // --- NEW: SCORE BREAKDOWN SECTION ---
+                const Align(alignment: Alignment.centerLeft, child: Text("Score Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 16),
+                Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                   child: Column(
-                    children: snapshot.data!.docs.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      return Column(
-                        children: [
-                          _buildHistoryItem(
-                            data['project_title'] ?? 'Unknown Project',
-                            _formatTimestamp(data['timestamp']),
-                            data['change'] as int,
-                            data['reason'] ?? 'Update',
-                          ),
-                          if (doc != snapshot.data!.docs.last) const Divider(),
-                        ],
-                      );
-                    }).toList(),
+                    children: [
+                      _buildBreakdownRow(Icons.check_circle_outline, "Verified Success", "$successCount times", "+10 points each", const Color(0xFF43A047)),
+                      const Divider(),
+                      _buildBreakdownRow(Icons.remove_circle_outline, "Rejection Penalty", "$penaltyCount times", "-5 points each", const Color(0xFFFFA000)),
+                      const Divider(),
+                      _buildBreakdownRow(Icons.cancel_outlined, "No Show", "$noShowCount times", "-20 points each", const Color(0xFFC62828)),
+                    ],
                   ),
-                );
-              },
-            ),
+                ),
+                const SizedBox(height: 30),
 
-            const SizedBox(height: 30),
+                // --- HOW SCORING WORKS ---
+                const Align(alignment: Alignment.centerLeft, child: Text("How Scoring Works", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                  child: Column(
+                    children: [
+                      _buildScoringRule(Icons.add_circle, const Color(0xFF43A047), "Verified Success (+10)", "Leader approves your submission."),
+                      const Divider(height: 24),
+                      _buildScoringRule(Icons.remove_circle, const Color(0xFFFFA000), "Rejection Penalty (-5)", "Leader rejects your submission due to quality issues."),
+                      const Divider(height: 24),
+                      _buildScoringRule(Icons.cancel, const Color(0xFFC62828), "No Show (-20)", "Failed to submit work or marked as missed."),
+                    ],
+                  ),
+                ),
 
-            const Align(alignment: Alignment.centerLeft, child: Text("How Scoring Works", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-              child: Column(
-                children: [
-                  _buildScoringRule(
-                      Icons.add_circle,
-                      const Color(0xFF43A047),
-                      "Verified Success (+10)",
-                      "Leader approves your submission."
+                const SizedBox(height: 30),
+
+                // --- HISTORY LIST ---
+                const Align(alignment: Alignment.centerLeft, child: Text("Points History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 16),
+
+                if (docs.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                    child: const Center(child: Text("No history available yet.", style: TextStyle(color: Colors.grey))),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                    child: Column(
+                      children: docs.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        return Column(
+                          children: [
+                            _buildHistoryItem(
+                              data['project_title'] ?? 'Unknown Project',
+                              _formatTimestamp(data['timestamp']),
+                              data['change'] as int,
+                              data['reason'] ?? 'Update',
+                            ),
+                            if (doc != docs.last) const Divider(),
+                          ],
+                        );
+                      }).toList(),
+                    ),
                   ),
-                  const Divider(height: 24),
-                  _buildScoringRule(
-                      Icons.remove_circle,
-                      const Color(0xFFFFA000),
-                      "Rejection Penalty (-5)",
-                      "Leader rejects your submission due to quality issues."
-                  ),
-                  const Divider(height: 24),
-                  _buildScoringRule(
-                      Icons.cancel,
-                      const Color(0xFFC62828),
-                      "No Show (-20)",
-                      "Failed to submit work or marked as missed."
-                  ),
-                ],
-              ),
+                const SizedBox(height: 40),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -576,6 +749,32 @@ class ReliabilityStatsPage extends StatelessWidget {
       return "${dt.day}/${dt.month}/${dt.year}";
     }
     return "";
+  }
+
+  Widget _buildBreakdownRow(IconData icon, String title, String count, String subtext, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(subtext, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              ],
+            ),
+          ),
+          Text(count, style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16)),
+        ],
+      ),
+    );
   }
 
   Widget _buildHistoryItem(String project, String date, int change, String reason) {
