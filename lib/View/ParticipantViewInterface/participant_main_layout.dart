@@ -1,44 +1,40 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../Authentication/login_page.dart';
+// lib/View/ParticipantViewInterface/participant_main_layout.dart
 
-class YouthMainLayout extends StatelessWidget {
-  const YouthMainLayout({super.key});
+import 'package:flutter/material.dart';
+import 'participant_job_list_screen.dart';
+import 'participant_my_tasks_page.dart'; // Import the new page
+
+class ParticipantMainLayout extends StatefulWidget {
+  const ParticipantMainLayout({super.key});
+
+  @override
+  State<ParticipantMainLayout> createState() => _ParticipantMainLayoutState();
+}
+
+class _ParticipantMainLayoutState extends State<ParticipantMainLayout> {
+  int _currentIndex = 0;
+
+  final List<Widget> _pages = [
+    const ParticipantJobBoard(),
+    const ParticipantMyTasksPage(), // Use the actual page now
+    const Center(child: Text("Community (Coming Soon)")),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Youth Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginPage()),
-                );
-              }
-            },
-          ),
+      body: SafeArea(child: _pages[_currentIndex]),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        selectedItemColor: const Color(0xFF2E5B3E),
+        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.work_outline), label: "Find Jobs"),
+          BottomNavigationBarItem(icon: Icon(Icons.assignment_turned_in), label: "My Tasks"),
+          BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: "Community"),
         ],
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.work_outline, size: 64, color: Colors.blue),
-            SizedBox(height: 16),
-            Text(
-              'Welcome, Youth Participant!',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text('Find jobs and earn rewards here.'),
-          ],
-        ),
       ),
     );
   }

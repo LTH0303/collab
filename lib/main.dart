@@ -2,43 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 
-// --- 1. Imports ---
 import 'models/AIService/ai_service.dart';
 import 'models/DatabaseService/database_service.dart';
 import 'models/ProjectRepository/project_repository.dart';
+import 'models/ProjectRepository/application_repository.dart'; // Correct path
 
+import 'ViewModel/AuthViewModel/auth_view_model.dart';
 import 'ViewModel/PlannerViewModel/planner_view_model.dart';
 import 'ViewModel/JobViewModule/job_view_model.dart';
+import 'ViewModel/ApplicationViewModel/application_view_model.dart';
 
-// Views
-import 'View/LeaderUserInterface/leader_main_layout.dart'; // Keep this if referenced elsewhere
-import 'View/Authentication/login_page.dart'; // Added Login Page
-
+import 'View/Authentication/login_page.dart';
 import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Initialize Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
-  // 2. Initialize Service Layer (Model)
   final aiService = AIService();
   final dbService = DatabaseService();
-
-  // 3. Initialize Repository Layer
   final projectRepo = ProjectRepository(aiService, dbService);
+  final appRepo = ApplicationRepository(dbService);
 
   runApp(
     MultiProvider(
       providers: [
-        // Inject Village Leader ViewModel
         ChangeNotifierProvider(create: (_) => PlannerViewModel(projectRepo)),
-
-        // Inject Youth Participant/JobBoard ViewModel
+        ChangeNotifierProvider(create: (_) => AuthViewModel()),
         ChangeNotifierProvider(create: (_) => JobViewModel(dbService)),
+        ChangeNotifierProvider(create: (_) => ApplicationViewModel(appRepo)),
       ],
       child: MyApp(),
     ),
@@ -51,11 +43,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Smart Village Advisor',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-        useMaterial3: true,
-      ),
-      // Point home to LoginPage instead of LeaderMainLayout
+      theme: ThemeData(primarySwatch: Colors.green, useMaterial3: true),
       home: const LoginPage(),
     );
   }

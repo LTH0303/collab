@@ -1,22 +1,38 @@
 // lib/models/ProjectRepository/project_repository.dart
 
+import 'package:firebase_auth/firebase_auth.dart'; // Import this
 import '../AIService/ai_service.dart';
 import '../DatabaseService/database_service.dart';
-import '../../models/project_model.dart';
+import 'project_model.dart';
+import 'i_project_repository.dart';
 
-class ProjectRepository {
+/// The specific implementation of the Repository.
+/// This acts as the bridge between the ViewModel and your Services (AI & DB).
+class ProjectRepository implements IProjectRepository {
   final AIService _aiService;
   final DatabaseService _dbService;
 
+  // Dependency Injection via Constructor
   ProjectRepository(this._aiService, this._dbService);
 
-  // 1. 找 AI 要方案
-  Future<Project> getAIRecommendation(String resources) async {
-    return await _aiService.generateProjectDraft(resources);
+  @override
+  Future<Project> getAIRecommendation(String resources, String budget) async {
+    // 1. Call the AI Service
+    return await _aiService.generateProjectDraft(resources, budget);
   }
 
-  // 2. 找 Firebase 存数据
+  @override
   Future<void> publishProject(Project project) async {
-    return await _dbService.addProject(project);
+    // 1. Get Current User (Leader) ID
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception("User must be logged in to publish a project.");
+    }
+
+    // 2. Set status to active
+    project.status = 'active';
+
+    // 3. Save to Firestore via DatabaseService, passing the Leader ID
+    await _dbService.addProject(project, user.uid);
   }
 }
