@@ -97,7 +97,7 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     return _project!.milestones.every((m) => m.isCompleted);
   }
 
-  // --- ACTIONS (With Optimistic Updates) ---
+  // --- ACTIONS ---
 
   Future<void> startProject(String projectId) async {
     // 1. Optimistic Update
@@ -123,7 +123,7 @@ class ProjectDetailsViewModel extends ChangeNotifier {
         final subIndex = milestone.submissions.indexWhere((s) => s.userId == userId);
         if (subIndex != -1) {
           milestone.submissions[subIndex].status = 'approved';
-          notifyListeners(); // Update UI immediately
+          notifyListeners();
         }
       } catch (e) {
         print("Optimistic update failed: $e");
@@ -148,7 +148,7 @@ class ProjectDetailsViewModel extends ChangeNotifier {
         if (subIndex != -1) {
           milestone.submissions[subIndex].status = 'rejected';
           milestone.submissions[subIndex].rejectionReason = reason;
-          notifyListeners(); // Update UI immediately
+          notifyListeners();
         }
       } catch (e) {
         print("Optimistic update failed: $e");
@@ -170,6 +170,7 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     // 1. Optimistic Update
     if (milestoneIndex < _project!.milestones.length) {
       _project!.milestones[milestoneIndex].status = 'completed';
+      // Unlock next
       if (milestoneIndex + 1 < _project!.milestones.length) {
         _project!.milestones[milestoneIndex + 1].status = 'open';
       }
@@ -178,6 +179,20 @@ class ProjectDetailsViewModel extends ChangeNotifier {
 
     try {
       await _dbService.completeMilestone(projectId, milestoneIndex);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // NEW: Force finalize
+  Future<void> finalizeProject(String projectId) async {
+    if (_project != null) {
+      _project!.status = 'completed'; // Optimistic
+      notifyListeners();
+    }
+    try {
+      await _dbService.finalizeProject(projectId);
     } catch (e) {
       _error = e.toString();
       notifyListeners();

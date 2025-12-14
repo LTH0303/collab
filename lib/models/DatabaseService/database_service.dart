@@ -333,13 +333,27 @@ class DatabaseService {
         if (nextIndex < milestones.length) {
           milestones[nextIndex].status = 'open';
         }
-        await projectRef.update({
+
+        // --- NEW: Check if ALL milestones are completed ---
+        bool allCompleted = milestones.every((m) => m.status == 'completed');
+        Map<String, dynamic> updateData = {
           'milestones': milestones.map((m) => m.toJson()).toList()
-        });
+        };
+        if (allCompleted) {
+          updateData['status'] = 'completed'; // Close the project!
+        }
+        // ------------------------------------------------
+
+        await projectRef.update(updateData);
       }
     } catch (e) {
       rethrow;
     }
+  }
+
+  // --- NEW METHOD: Force close a project (for existing stuck projects) ---
+  Future<void> finalizeProject(String projectId) async {
+    await _db.collection('projects').doc(projectId).update({'status': 'completed'});
   }
 
   // --- NEW COMMUNITY METHODS ---
@@ -359,18 +373,15 @@ class DatabaseService {
     await _db.collection('posts').add(post.toJson());
   }
 
-  // 3. Like/Unlike (UPDATED FOR WINDOWS STABILITY)
-  // Replaced runTransaction with FieldValue.arrayUnion/arrayRemove
+  // 3. Like/Unlike
   Future<void> togglePostLike(String postId, String userId, bool shouldLike) async {
     final ref = _db.collection('posts').doc(postId);
 
     if (shouldLike) {
-      // Add user to the array atomically
       await ref.update({
         'likedBy': FieldValue.arrayUnion([userId])
       });
     } else {
-      // Remove user from the array atomically
       await ref.update({
         'likedBy': FieldValue.arrayRemove([userId])
       });

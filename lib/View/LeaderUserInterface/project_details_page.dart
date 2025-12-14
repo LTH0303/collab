@@ -58,6 +58,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   }
 
   Widget _buildProjectContent(BuildContext context, ProjectDetailsViewModel viewModel, Project project) {
+    bool isActive = project.status == 'active';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -67,18 +69,18 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.green,
+              color: isActive ? Colors.green : Colors.grey,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Text(
-              "Active",
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            child: Text(
+              isActive ? "Active" : "Completed",
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ),
           const SizedBox(height: 24),
 
-          // 2. Start Project Banner (IF NOT STARTED)
-          if (!viewModel.isProjectStarted)
+          // 2. Start Project Banner (IF NOT STARTED & NOT COMPLETED)
+          if (!viewModel.isProjectStarted && isActive)
             Container(
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: 24),
@@ -370,12 +372,45 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   Widget _buildProjectActions(ProjectDetailsViewModel viewModel, Project project) {
     bool isCompleted = viewModel.isProjectCompleted;
+    bool isStillActive = project.status == 'active';
+
+    // Show "Close Project" button if all milestones are done but status is still active (Fix for stuck projects)
+    bool showForceClose = isCompleted && isStillActive;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text("Project Actions", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
+
+        if (showForceClose)
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8)),
+            child: Column(
+              children: [
+                const Text("All milestones are complete, but project is still active.", style: TextStyle(color: Colors.red, fontSize: 12)),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (project.id != null) {
+                        await viewModel.finalizeProject(project.id!);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Project Closed! Participants can now apply for new jobs.")));
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    child: const Text("Close Project Now"),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
@@ -420,7 +455,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   void _showCompleteMilestoneDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex) {
     final milestone = viewModel.project?.milestones[milestoneIndex];
     if (milestone == null) return;
-    // Capture messenger here
     final messenger = ScaffoldMessenger.of(context);
 
     if (!milestone.canBeCompleted) {
@@ -573,7 +607,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   void _showApproveDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final commentController = TextEditingController();
-    // CAPTURE MESSENGER CONTEXT HERE (Parent of dialog)
     final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
@@ -589,13 +622,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
-              // 1. Close Dialog
               Navigator.pop(ctx);
-
-              // 2. Call VM (Optimistic Update)
               await viewModel.approveSubmission(projectId, milestoneIndex, userId, comment: commentController.text);
-
-              // 3. Show SnackBar using captured messenger
               messenger.showSnackBar(const SnackBar(content: Text("Submission approved!"), backgroundColor: Colors.green));
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
