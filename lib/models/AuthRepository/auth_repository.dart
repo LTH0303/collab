@@ -5,7 +5,7 @@ class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // 登录方法
+  // Sign In
   Future<User?> signIn(String email, String password) async {
     try {
       UserCredential result = await _auth.signInWithEmailAndPassword(
@@ -14,26 +14,54 @@ class AuthRepository {
       );
       return result.user;
     } catch (e) {
-      rethrow; // 将错误抛给 ViewModel 处理
+      rethrow;
     }
   }
 
-  // 获取用户角色 (从 Firestore 读取)
-  // 假设你在 Firestore 有一个 'users' 集合，文档 ID 是用户的 UID
+  // Sign Up (New Method)
+  Future<User?> signUp(String email, String password, String role, String name) async {
+    try {
+      // 1. Create User in Firebase Auth
+      UserCredential result = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      User? user = result.user;
+
+      if (user != null) {
+        // 2. Update Display Name in Auth Profile
+        await user.updateDisplayName(name);
+
+        // 3. Create User Document in Firestore
+        await _firestore.collection('users').doc(user.uid).set({
+          'email': email,
+          'role': role, // 'leader' or 'participant'
+          'name': name,
+          'created_at': FieldValue.serverTimestamp(),
+          'skills': role == 'participant' ? [] : null, // Initialize empty skills for youth
+          'village': 'Kampung Baru', // Default for demo
+        });
+      }
+      return user;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Get User Role
   Future<String?> getUserRole(String uid) async {
     try {
       DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
       if (doc.exists && doc.data() != null) {
-        // 获取 'role' 字段，例如 "leader" 或 "participant"
         return (doc.data() as Map<String, dynamic>)['role'] as String?;
       }
       return null;
     } catch (e) {
-      throw Exception("无法获取用户角色: $e");
+      throw Exception("Error fetching user role: $e");
     }
   }
 
-  // 登出
+  // Sign Out
   Future<void> signOut() async {
     await _auth.signOut();
   }
