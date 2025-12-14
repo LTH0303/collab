@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/ProjectDetailsViewModel/project_details_view_model.dart';
 import '../../models/ProjectRepository/project_model.dart';
-import '../../models/DatabaseService/database_service.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
   final Project project;
@@ -19,8 +18,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   @override
   void initState() {
     super.initState();
-    final viewModel = Provider.of<ProjectDetailsViewModel>(context, listen: false);
-    viewModel.setProject(widget.project);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final viewModel = Provider.of<ProjectDetailsViewModel>(context, listen: false);
+      if (widget.project.id != null) {
+        viewModel.listenToProject(widget.project.id!);
+      } else {
+        viewModel.setProject(widget.project);
+      }
+    });
   }
 
   @override
@@ -41,40 +46,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       ),
       body: Consumer<ProjectDetailsViewModel>(
         builder: (context, viewModel, _) {
-          // Stream project updates
-          if (widget.project.id != null) {
-            return StreamBuilder<Project?>(
-              stream: viewModel.streamProject(widget.project.id!),
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    viewModel.setProject(snapshot.data!);
-                  });
-                }
-
-                final project = snapshot.hasData && snapshot.data != null
-                    ? snapshot.data!
-                    : viewModel.project ?? widget.project;
-
-                if (project == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                return _buildProjectContent(context, viewModel, project);
-              },
-            );
-          }
-
-          final project = viewModel.project ?? widget.project;
-          if (project == null) {
+          if (viewModel.isLoading && viewModel.project == null) {
             return const Center(child: CircularProgressIndicator());
           }
 
+          final project = viewModel.project ?? widget.project;
           return _buildProjectContent(context, viewModel, project);
         },
       ),
-
-
     );
   }
 
@@ -84,7 +63,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Project Status Badge
+          // 1. Status Badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -98,15 +77,69 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           ),
           const SizedBox(height: 24),
 
-          // Milestone Checklist Section
+          // 2. Start Project Banner (IF NOT STARTED)
+          if (!viewModel.isProjectStarted)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.purple[50],
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.purple.shade100, width: 2),
+              ),
+              child: Column(
+                children: [
+                  const Icon(Icons.rocket_launch, size: 40, color: Colors.purple),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "Project Not Started",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.purple),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Participants cannot submit work until you unlock Phase 1.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text("Start Project Now", style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () async {
+                        if (project.id != null) {
+                          await viewModel.startProject(project.id!);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Project Started! Phase 1 Unlocked."), backgroundColor: Colors.green),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  )
+                ],
+              ),
+            ),
+
+          // 3. Milestone Checklist
           _buildMilestoneChecklist(viewModel, project),
           const SizedBox(height: 32),
 
-          // Live KPIs Section
+          // 4. Live KPIs
           _buildLiveKPIs(viewModel, project),
           const SizedBox(height: 32),
 
-          // Project Actions Section (always show, but buttons disabled if not completed)
+          // 5. Actions
           _buildProjectActions(viewModel, project),
         ],
       ),
@@ -139,24 +172,20 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       ) {
     IconData icon;
     Color iconColor;
-    String statusText;
     bool isEnabled;
 
     if (milestone.isCompleted) {
       icon = Icons.check_circle;
       iconColor = Colors.green;
-      statusText = "Completed";
-      isEnabled = false; // Cannot untick
+      isEnabled = false;
     } else if (milestone.isOpen) {
       icon = Icons.radio_button_unchecked;
       iconColor = Colors.blue;
-      statusText = "In Progress";
-      isEnabled = true; // Can tick with confirmation
+      isEnabled = true;
     } else {
       icon = Icons.radio_button_unchecked;
       iconColor = Colors.grey.shade400;
-      statusText = "Locked";
-      isEnabled = false; // Disabled
+      isEnabled = false;
     }
 
     int submissionCount = milestone.submissions.length;
@@ -191,7 +220,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   if (milestone.canBeCompleted) {
                     _showCompleteMilestoneDialog(viewModel, project.id!, index);
                   } else {
-                    // Show message why can't complete
                     String message = "Cannot complete milestone: ";
                     if (milestone.submissions.isEmpty) {
                       message += "No submissions received yet.";
@@ -200,10 +228,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                       message += "$pendingCount submission(s) still pending review.";
                     }
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(message),
-                        backgroundColor: Colors.orange,
-                      ),
+                      SnackBar(content: Text(message), backgroundColor: Colors.orange),
                     );
                   }
                 }
@@ -221,22 +246,15 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   children: [
                     Text(
                       milestone.taskName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     Text(
                       milestone.phaseName,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                   ],
                 ),
               ),
-              // Show submission count button for unlocked milestones (open or completed)
               if (milestone.isOpen || milestone.isCompleted)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -267,7 +285,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             "Incentive: ${milestone.incentive}",
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
-          // Show Review button for unlocked milestones (open or completed)
           if (milestone.isOpen || milestone.isCompleted) ...[
             const SizedBox(height: 12),
             ElevatedButton.icon(
@@ -288,14 +305,13 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
+  // --- KPI & Actions Sections (Same as before) ---
+
   Widget _buildLiveKPIs(ProjectDetailsViewModel viewModel, Project project) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Live KPIs",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
+        const Text("Live KPIs", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         _buildKPICard(
           "Milestone Progress",
@@ -323,11 +339,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -336,25 +348,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              ),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
+              Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-          ),
+          Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
           const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
@@ -376,20 +375,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Project Actions",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
+        const Text("Project Actions", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: isCompleted
                 ? () {
-              // TODO: Implement Generate Final Impact
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Generate Final Impact - Coming Soon")),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Generate Final Impact - Coming Soon")));
             }
                 : null,
             icon: const Icon(Icons.assessment),
@@ -407,10 +400,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           child: ElevatedButton.icon(
             onPressed: isCompleted
                 ? () {
-              // TODO: Implement Recommend Next Project
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Recommend Next Project - Coming Soon")),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Recommend Next Project - Coming Soon")));
             }
                 : null,
             icon: const Icon(Icons.lightbulb_outline),
@@ -422,79 +412,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             ),
           ),
         ),
-        if (!isCompleted) ...[
-          const SizedBox(height: 8),
-          Text(
-            "Available after project completion",
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            textAlign: TextAlign.center,
-          ),
-        ],
       ],
-    );
-  }
-
-  Widget _buildSubmissionListItem(MilestoneSubmission submission) {
-    Color statusColor;
-    IconData statusIcon;
-    String statusText;
-
-    switch (submission.status) {
-      case 'pending':
-        statusColor = Colors.orange;
-        statusIcon = Icons.pending;
-        statusText = 'Pending';
-        break;
-      case 'approved':
-        statusColor = Colors.green;
-        statusIcon = Icons.check_circle;
-        statusText = 'Approved';
-        break;
-      case 'rejected':
-        statusColor = Colors.red;
-        statusIcon = Icons.cancel;
-        statusText = 'Rejected';
-        break;
-      case 'missed':
-        statusColor = Colors.grey;
-        statusIcon = Icons.error_outline;
-        statusText = 'Missed';
-        break;
-      default:
-        statusColor = Colors.grey;
-        statusIcon = Icons.help_outline;
-        statusText = 'Unknown';
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(statusIcon, size: 16, color: statusColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              submission.userName,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-          ),
-          Text(
-            statusText,
-            style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            "RM ${submission.expenseClaimed}",
-            style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
     );
   }
 
@@ -502,21 +420,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     final milestone = viewModel.project?.milestones[milestoneIndex];
     if (milestone == null) return;
 
-    // Check if all submissions are reviewed
     if (!milestone.canBeCompleted) {
-      String message = "Cannot complete milestone: ";
-      if (milestone.submissions.isEmpty) {
-        message += "No submissions received yet. Wait for participants to submit their work.";
-      } else {
-        int pendingCount = milestone.pendingSubmissionsCount;
-        message += "$pendingCount submission(s) still pending review. Please review all submissions first.";
-      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 3),
-        ),
+        const SnackBar(content: Text("Cannot complete milestone: Pending submissions exist."), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -525,32 +431,19 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Complete Milestone?"),
-        content: const Text(
-          "This will mark the milestone as completed and unlock the next phase. This action cannot be undone.",
-        ),
+        content: const Text("This will mark the milestone as completed and unlock the next phase."),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await viewModel.completeMilestone(projectId, milestoneIndex);
-              if (ctx.mounted && viewModel.error != null) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                    content: Text(viewModel.error!),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              } else if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text("Milestone completed!"),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+              if (ctx.mounted) {
+                if (viewModel.error != null) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(viewModel.error!), backgroundColor: Colors.red));
+                } else {
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Milestone completed!"), backgroundColor: Colors.green));
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
@@ -561,12 +454,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  void _showSubmissionsDialog(
-      ProjectDetailsViewModel viewModel,
-      Project project,
-      int milestoneIndex,
-      Milestone milestone,
-      ) {
+  void _showSubmissionsDialog(ProjectDetailsViewModel viewModel, Project project, int milestoneIndex, Milestone milestone) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -580,20 +468,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Text(
-              "Submissions Review",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
+            const Text("Submissions Review", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             Expanded(
               child: ListView(
                 children: milestone.submissions.map((submission) {
-                  return _buildSubmissionCard(
-                    viewModel,
-                    project.id!,
-                    milestoneIndex,
-                    submission,
-                  );
+                  return _buildSubmissionCard(viewModel, project.id!, milestoneIndex, submission);
                 }).toList(),
               ),
             ),
@@ -603,12 +483,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  Widget _buildSubmissionCard(
-      ProjectDetailsViewModel viewModel,
-      String projectId,
-      int milestoneIndex,
-      MilestoneSubmission submission,
-      ) {
+  Widget _buildSubmissionCard(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, MilestoneSubmission submission) {
     Color statusColor;
     IconData statusIcon;
 
@@ -624,10 +499,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       case 'rejected':
         statusColor = Colors.red;
         statusIcon = Icons.cancel;
-        break;
-      case 'missed':
-        statusColor = Colors.grey;
-        statusIcon = Icons.error_outline;
         break;
       default:
         statusColor = Colors.grey;
@@ -645,11 +516,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           width: submission.status == 'pending' ? 2 : 1,
         ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -657,114 +524,47 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                backgroundColor: statusColor.withOpacity(0.2),
-                child: Icon(statusIcon, color: statusColor, size: 20),
-              ),
+              CircleAvatar(backgroundColor: statusColor.withOpacity(0.2), child: Icon(statusIcon, color: statusColor, size: 20)),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      submission.userName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      submission.status.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: statusColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    Text(submission.userName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(submission.status.toUpperCase(), style: TextStyle(fontSize: 11, color: statusColor, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    "Expenses: RM ${submission.expenseClaimed}",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                ],
-              ),
+              Text("RM ${submission.expenseClaimed}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
             ],
           ),
           const SizedBox(height: 12),
-          // Photo proof placeholder
           Container(
             height: 120,
             width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: submission.proofImageUrl.isNotEmpty
-                ? ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                submission.proofImageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Icon(Icons.image_not_supported, size: 40),
-                  );
-                },
-              ),
-            )
-                : const Center(
-              child: Icon(Icons.image, size: 40, color: Colors.grey),
-            ),
+            decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
+            child: const Center(child: Text("Photo Proof Placeholder", style: TextStyle(color: Colors.grey))),
           ),
-          if (submission.rejectionReason != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                "Reason: ${submission.rejectionReason}",
-                style: TextStyle(fontSize: 12, color: Colors.red.shade700),
-              ),
+          if (submission.rejectionReason != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text("Reason: ${submission.rejectionReason}", style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
             ),
-          ],
           if (submission.status == 'pending') ...[
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                OutlinedButton.icon(
-                  onPressed: () => _showRejectDialog(
-                    viewModel,
-                    projectId,
-                    milestoneIndex,
-                    submission.userId,
-                  ),
-                  icon: const Icon(Icons.close, size: 16),
-                  label: const Text("Reject"),
+                OutlinedButton(
+                  onPressed: () => _showRejectDialog(viewModel, projectId, milestoneIndex, submission.userId),
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text("Reject"),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: () => _showApproveDialog(
-                    viewModel,
-                    projectId,
-                    milestoneIndex,
-                    submission.userId,
-                  ),
-                  icon: const Icon(Icons.check, size: 16),
-                  label: const Text("Approve"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
+                ElevatedButton(
+                  onPressed: () => _showApproveDialog(viewModel, projectId, milestoneIndex, submission.userId),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  child: const Text("Approve"),
                 ),
               ],
             ),
@@ -774,53 +574,25 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  void _showApproveDialog(
-      ProjectDetailsViewModel viewModel,
-      String projectId,
-      int milestoneIndex,
-      String userId,
-      ) {
+  void _showApproveDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final commentController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Approve Submission"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: commentController,
-              decoration: const InputDecoration(
-                hintText: "Optional comment...",
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-          ],
+        content: TextField(
+          controller: commentController,
+          decoration: const InputDecoration(hintText: "Optional comment...", border: OutlineInputBorder()),
+          maxLines: 3,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await viewModel.approveSubmission(
-                projectId,
-                milestoneIndex,
-                userId,
-                comment: commentController.text.isEmpty ? null : commentController.text,
-              );
+              await viewModel.approveSubmission(projectId, milestoneIndex, userId, comment: commentController.text);
               if (ctx.mounted) {
-                Navigator.pop(ctx); // Close submissions dialog
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text("Submission approved!"),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Submission approved!"), backgroundColor: Colors.green));
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
@@ -831,57 +603,26 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  void _showRejectDialog(
-      ProjectDetailsViewModel viewModel,
-      String projectId,
-      int milestoneIndex,
-      String userId,
-      ) {
+  void _showRejectDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final reasonController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Reject Submission"),
         content: TextField(
           controller: reasonController,
-          decoration: const InputDecoration(
-            hintText: "Enter rejection reason...",
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(hintText: "Enter rejection reason...", border: OutlineInputBorder()),
           maxLines: 3,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
-              if (reasonController.text.isEmpty) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text("Please enter a rejection reason"),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
-              }
+              if (reasonController.text.isEmpty) return;
               Navigator.pop(ctx);
-              await viewModel.rejectSubmission(
-                projectId,
-                milestoneIndex,
-                userId,
-                reasonController.text,
-              );
+              await viewModel.rejectSubmission(projectId, milestoneIndex, userId, reasonController.text);
               if (ctx.mounted) {
-                Navigator.pop(ctx); // Close submissions dialog
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text("Submission rejected"),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Submission rejected"), backgroundColor: Colors.red));
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -892,4 +633,3 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 }
-

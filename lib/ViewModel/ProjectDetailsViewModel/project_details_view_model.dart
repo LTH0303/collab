@@ -1,22 +1,65 @@
 // lib/ViewModel/ProjectDetailsViewModel/project_details_view_model.dart
 
+import 'dart:async'; // Import for StreamSubscription
 import 'package:flutter/material.dart';
 import '../../models/ProjectRepository/project_model.dart';
 import '../../models/DatabaseService/database_service.dart';
 
 class ProjectDetailsViewModel extends ChangeNotifier {
   final DatabaseService _dbService = DatabaseService();
+
   Project? _project;
   bool _isLoading = false;
   String? _error;
+
+  // Manage the subscription internally
+  StreamSubscription<Project?>? _projectSubscription;
 
   Project? get project => _project;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  // --- INITIALIZATION ---
+
+  // Start listening to the project document
+  void listenToProject(String projectId) {
+    _isLoading = true;
+    _error = null;
+
+    _projectSubscription?.cancel();
+    _projectSubscription = _dbService.streamProject(projectId).listen(
+          (updatedProject) {
+        _project = updatedProject;
+        _isLoading = false;
+        notifyListeners();
+      },
+      onError: (e) {
+        _error = e.toString();
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
+  }
+
   void setProject(Project project) {
     _project = project;
     notifyListeners();
+  }
+
+  // Stop listening when leaving the page
+  @override
+  void dispose() {
+    _projectSubscription?.cancel();
+    super.dispose();
+  }
+
+  // --- CALCULATIONS & GETTERS ---
+
+  // Check if project is started (Phase 1 is open or completed)
+  bool get isProjectStarted {
+    if (_project == null || _project!.milestones.isEmpty) return false;
+    // It is started if the first milestone is NOT locked
+    return _project!.milestones[0].isOpen || _project!.milestones[0].isCompleted;
   }
 
   // Calculate Milestone Progress (%)
@@ -27,14 +70,12 @@ class ProjectDetailsViewModel extends ChangeNotifier {
   }
 
   // Calculate Youth Participation (%)
-  // Formula: (Total submissions completed) / (Total expected submissions up to current milestone)
   double get youthParticipation {
     if (_project == null || _project!.activeParticipants.isEmpty) return 0.0;
 
     int totalParticipants = _project!.activeParticipants.length;
     int currentMilestoneIndex = _project!.milestones.indexWhere((m) => m.isOpen);
 
-    // If no open milestone, use all milestones
     int milestonesToCount = currentMilestoneIndex == -1
         ? _project!.milestones.length
         : currentMilestoneIndex + 1;
@@ -42,7 +83,6 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     int totalExpected = totalParticipants * milestonesToCount;
     if (totalExpected == 0) return 0.0;
 
-    // Count all non-pending submissions up to current milestone
     int totalSubmissions = 0;
     for (int i = 0; i < milestonesToCount && i < _project!.milestones.length; i++) {
       totalSubmissions += _project!.milestones[i].submissions
@@ -65,13 +105,24 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     return _project!.milestones.every((m) => m.isCompleted);
   }
 
-  // Get current active milestone index
-  int? get currentActiveMilestoneIndex {
-    if (_project == null) return null;
-    return _project!.milestones.indexWhere((m) => m.isOpen);
+  // --- ACTIONS ---
+
+  // START PROJECT
+  Future<void> startProject(String projectId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _dbService.startProject(projectId);
+      // Stream will update the UI
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  // Approve submission
   Future<void> approveSubmission(String projectId, int milestoneIndex, String userId, {String? comment}) async {
     _isLoading = true;
     _error = null;
@@ -79,16 +130,13 @@ class ProjectDetailsViewModel extends ChangeNotifier {
 
     try {
       await _dbService.reviewMilestoneSubmission(projectId, milestoneIndex, userId, true, comment);
-      await _refreshProject(projectId);
     } catch (e) {
       _error = e.toString();
-    } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // Reject submission
   Future<void> rejectSubmission(String projectId, int milestoneIndex, String userId, String reason) async {
     _isLoading = true;
     _error = null;
@@ -96,33 +144,13 @@ class ProjectDetailsViewModel extends ChangeNotifier {
 
     try {
       await _dbService.reviewMilestoneSubmission(projectId, milestoneIndex, userId, false, reason);
-      await _refreshProject(projectId);
     } catch (e) {
       _error = e.toString();
-    } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // Mark submission as missed
-  Future<void> markSubmissionAsMissed(String projectId, int milestoneIndex, String userId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      await _dbService.markSubmissionAsMissed(projectId, milestoneIndex, userId);
-      await _refreshProject(projectId);
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // Complete milestone (only if all submissions are reviewed)
   Future<void> completeMilestone(String projectId, int milestoneIndex) async {
     if (_project == null) return;
 
@@ -139,31 +167,10 @@ class ProjectDetailsViewModel extends ChangeNotifier {
 
     try {
       await _dbService.completeMilestone(projectId, milestoneIndex);
-      await _refreshProject(projectId);
     } catch (e) {
       _error = e.toString();
-    } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
-
-  // Refresh project data
-  Future<void> _refreshProject(String projectId) async {
-    try {
-      final snapshot = await _dbService.getProjectById(projectId);
-      if (snapshot != null) {
-        _project = snapshot;
-        notifyListeners();
-      }
-    } catch (e) {
-      print("Error refreshing project: $e");
-    }
-  }
-
-  // Stream project updates
-  Stream<Project?> streamProject(String projectId) {
-    return _dbService.streamProject(projectId);
-  }
 }
-
