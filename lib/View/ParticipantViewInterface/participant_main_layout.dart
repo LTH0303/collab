@@ -1,8 +1,7 @@
-// lib/View/ParticipantViewInterface/participant_main_layout.dart
-
 import 'package:flutter/material.dart';
 import 'participant_job_list_screen.dart';
-import 'participant_my_tasks_page.dart'; // Import the new page
+import 'participant_my_tasks_page.dart';
+import '../CommunityInterface/community_hub_page.dart'; // Import the new community page
 
 class ParticipantMainLayout extends StatefulWidget {
   const ParticipantMainLayout({super.key});
@@ -16,8 +15,8 @@ class _ParticipantMainLayoutState extends State<ParticipantMainLayout> {
 
   final List<Widget> _pages = [
     const ParticipantJobBoard(),
-    const ParticipantMyTasksPage(), // Use the actual page now
-    const Center(child: Text("Community (Coming Soon)")),
+    const ParticipantMyTasksPage(),
+    const CommunityHubPage(), // <--- Added here
   ];
 
   @override

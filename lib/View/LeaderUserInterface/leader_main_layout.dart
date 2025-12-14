@@ -1,11 +1,9 @@
-// lib/View/LeaderUserInterface/leader_main_layout.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/PlannerViewModel/planner_view_model.dart';
 import 'leader_profile_page.dart';
 import 'projects_section_view.dart';
-import 'application_list_page.dart'; // Still imported if needed elsewhere, but link removed from AppBar
+import '../CommunityInterface/community_hub_page.dart'; // Import the new community page
 
 class LeaderMainLayout extends StatefulWidget {
   const LeaderMainLayout({super.key});
@@ -55,7 +53,6 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
           ],
         ),
         actions: [
-          // REMOVED: Notification Icon as per request
           IconButton(
             icon: const Icon(Icons.person_outline, color: Colors.black),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderProfilePage())),
@@ -80,15 +77,15 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
         children: [
           AIPlannerSection(onGenerateSuccess: switchToProjectsTab),
           const ProjectsSection(),
-          const Center(child: Text("Impact Coming Soon")),
-          const Center(child: Text("Community Coming Soon")),
+          const Center(child: Text("Impact Dashboard Coming Soon")),
+          const CommunityHubPage(), // <--- Added here
         ],
       ),
     );
   }
 }
 
-// --- AI Planner Section (Same as before) ---
+// --- AI Planner Section ---
 class AIPlannerSection extends StatefulWidget {
   final VoidCallback onGenerateSuccess;
   const AIPlannerSection({super.key, required this.onGenerateSuccess});

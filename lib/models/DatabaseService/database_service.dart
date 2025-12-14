@@ -1,20 +1,21 @@
 // lib/models/DatabaseService/database_service.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../ProjectRepository/project_model.dart';
 import '../ProjectRepository/application_model.dart';
+import '../CommunityRepository/post_model.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // --- PROJECT METHODS ---
+  // --- EXISTING PROJECT METHODS ---
 
   Future<void> addProject(Project project, String leaderId) async {
     project.status = 'active';
     for (var m in project.milestones) {
       m.status = 'locked';
     }
-
     await _db.collection('projects').add({
       ...project.toJson(),
       'leader_id': leaderId,
@@ -25,66 +26,47 @@ class DatabaseService {
 
   Future<void> startProject(String projectId) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
-
     try {
       DocumentSnapshot snapshot = await projectRef.get();
       if (!snapshot.exists) throw Exception("Project not found");
-
       Map<String, dynamic>? data = snapshot.data() as Map<String, dynamic>?;
       if (data == null) throw Exception("Project data is empty");
-
       List<dynamic> milestonesRaw = data['milestones'] ?? [];
       List<Milestone> milestones = milestonesRaw.map((m) => Milestone.fromJson(m)).toList();
-
       if (milestones.isNotEmpty) {
         milestones[0].status = 'open';
       } else {
         return;
       }
-
       await projectRef.update({
         'milestones': milestones.map((m) => m.toJson()).toList()
       });
-
     } catch (e) {
-      print("Error starting project: $e");
       rethrow;
     }
   }
 
   Future<void> unlockNextPhase(String projectId, int currentPhaseIndex) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
-
     try {
       DocumentSnapshot snapshot = await projectRef.get();
       if (!snapshot.exists) throw Exception("Project not found");
-
       Map<String, dynamic>? data = snapshot.data() as Map<String, dynamic>?;
       if (data == null) throw Exception("Project data is empty");
-
       List<dynamic> milestonesRaw = data['milestones'] ?? [];
       List<Milestone> milestones = milestonesRaw.map((m) => Milestone.fromJson(m)).toList();
-
-      // Mark current phase as explicitly completed (if not already)
       milestones[currentPhaseIndex].status = 'completed';
-
-      // Unlock next
       int nextIndex = currentPhaseIndex + 1;
       if (nextIndex < milestones.length) {
         milestones[nextIndex].status = 'open';
       }
-
       await projectRef.update({
         'milestones': milestones.map((m) => m.toJson()).toList()
       });
-
     } catch (e) {
-      print("Error unlocking phase: $e");
       rethrow;
     }
   }
-
-  // --- EXISTING METHODS ---
 
   Future<int> countLeaderActiveProjects(String leaderId) async {
     final snapshot = await _db.collection('projects')
@@ -131,21 +113,14 @@ class DatabaseService {
         .toList());
   }
 
-  // --- NEW MILESTONE SUBMISSION FLOW (Multiple Submissions) ---
-
   Future<void> submitMilestone(String projectId, int milestoneIndex, String userId, String userName, String expense, String? photoUrl) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
-
     try {
-      // 1. Fetch current data
       DocumentSnapshot snapshot = await projectRef.get();
       if (!snapshot.exists) throw Exception("Project not found");
-
       Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
       List<dynamic> rawMilestones = data['milestones'] ?? [];
       List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
-
-      // 2. Modify data in memory
       if (milestoneIndex < milestones.length) {
         final submission = MilestoneSubmission(
           userId: userId,
@@ -155,57 +130,41 @@ class DatabaseService {
           status: 'pending',
           submittedAt: DateTime.now(),
         );
-
         milestones[milestoneIndex].submissions.add(submission);
-
-        // 3. Write data back (Standard update, no transaction to avoid Windows crash)
         await projectRef.update({
           'milestones': milestones.map((m) => m.toJson()).toList()
         });
       }
     } catch (e) {
-      print("Error submitting milestone: $e");
       rethrow;
     }
   }
 
   Future<void> reviewMilestoneSubmission(String projectId, int milestoneIndex, String submissionUserId, bool isApproved, String? rejectionReason) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
-
     try {
-      // 1. Fetch current data
       DocumentSnapshot snapshot = await projectRef.get();
       if (!snapshot.exists) throw Exception("Project not found");
-
       Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
       List<dynamic> rawMilestones = data['milestones'] ?? [];
       List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
-
-      // 2. Modify data
       if (milestoneIndex < milestones.length) {
         var milestone = milestones[milestoneIndex];
-
         int subIndex = milestone.submissions.indexWhere((s) => s.userId == submissionUserId && s.status == 'pending');
-
         if (subIndex != -1) {
           milestone.submissions[subIndex].status = isApproved ? 'approved' : 'rejected';
           if (!isApproved) {
             milestone.submissions[subIndex].rejectionReason = rejectionReason;
           }
         }
-
-        // 3. Update
         await projectRef.update({
           'milestones': milestones.map((m) => m.toJson()).toList()
         });
       }
     } catch (e) {
-      print("Error reviewing milestone: $e");
       rethrow;
     }
   }
-
-  // --- APPLICATION METHODS ---
 
   Future<void> addApplication(Application app) async {
     await _db.collection('applications').add(app.toJson());
@@ -232,7 +191,6 @@ class DatabaseService {
         .where('applicant_id', isEqualTo: userId)
         .where('project_id', isEqualTo: projectId)
         .get();
-
     if (snapshot.docs.isNotEmpty) {
       return snapshot.docs.first.data()['status'] as String?;
     }
@@ -275,40 +233,42 @@ class DatabaseService {
 
   Future<void> approveApplicationTransaction(Application app) async {
     WriteBatch batch = _db.batch();
-
     DocumentReference appRef = _db.collection('applications').doc(app.id);
     DocumentReference projectRef = _db.collection('projects').doc(app.projectId);
-
     QuerySnapshot otherAppsSnapshot = await _db.collection('applications')
         .where('applicant_id', isEqualTo: app.applicantId)
         .where('status', isEqualTo: 'pending')
         .get();
-
     batch.update(appRef, {'status': 'approved'});
-
     batch.update(projectRef, {
       'active_participants': FieldValue.arrayUnion([app.applicantId])
     });
-
     for (var doc in otherAppsSnapshot.docs) {
       if (doc.id != app.id) {
         batch.update(doc.reference, {'status': 'withdrawn'});
       }
     }
-
     await batch.commit();
   }
 
+  // --- USER PROFILE ---
+
   Future<Map<String, dynamic>?> getUserProfile(String userId) async {
+    try {
+      final doc = await _db.collection('users').doc(userId).get();
+      if (doc.exists) {
+        return doc.data();
+      }
+    } catch (e) {
+      print("Error fetching user profile: $e");
+    }
+    // Fallback if no user doc found
     return {
-      'name': 'Youth Participant',
-      'email': 'email@example.com',
-      'skills': ['Farming', 'Labor'],
-      'reliability': 'High'
+      'name': 'User',
+      'email': 'No Email',
+      'role': 'participant', // Default
     };
   }
-
-  // --- PROJECT DETAILS METHODS ---
 
   Future<Project?> getProjectById(String projectId) async {
     try {
@@ -318,7 +278,6 @@ class DatabaseService {
       }
       return null;
     } catch (e) {
-      print("Error getting project: $e");
       return null;
     }
   }
@@ -334,69 +293,94 @@ class DatabaseService {
 
   Future<void> markSubmissionAsMissed(String projectId, int milestoneIndex, String userId) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
-
     try {
       DocumentSnapshot snapshot = await projectRef.get();
       if (!snapshot.exists) throw Exception("Project not found");
-
       Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
       List<dynamic> rawMilestones = data['milestones'] ?? [];
       List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
-
       if (milestoneIndex < milestones.length) {
         var milestone = milestones[milestoneIndex];
         int subIndex = milestone.submissions.indexWhere((s) => s.userId == userId && s.status == 'pending');
-
         if (subIndex != -1) {
           milestone.submissions[subIndex].status = 'missed';
           milestone.submissions[subIndex].rejectionReason = 'Submission marked as missed (past due)';
         }
-
         await projectRef.update({
           'milestones': milestones.map((m) => m.toJson()).toList()
         });
       }
     } catch (e) {
-      print("Error marking submission as missed: $e");
       rethrow;
     }
   }
 
   Future<void> completeMilestone(String projectId, int milestoneIndex) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
-
     try {
       DocumentSnapshot snapshot = await projectRef.get();
       if (!snapshot.exists) throw Exception("Project not found");
-
       Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
       List<dynamic> rawMilestones = data['milestones'] ?? [];
       List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
-
       if (milestoneIndex < milestones.length) {
         var milestone = milestones[milestoneIndex];
-
-        // Verify all submissions are reviewed
         if (milestone.submissions.any((s) => s.status == 'pending')) {
           throw Exception("Cannot complete milestone: Some submissions are still pending.");
         }
-
-        // Mark milestone as completed
         milestone.status = 'completed';
-
-        // Unlock next milestone if exists
         int nextIndex = milestoneIndex + 1;
         if (nextIndex < milestones.length) {
           milestones[nextIndex].status = 'open';
         }
-
         await projectRef.update({
           'milestones': milestones.map((m) => m.toJson()).toList()
         });
       }
     } catch (e) {
-      print("Error completing milestone: $e");
       rethrow;
     }
+  }
+
+  // --- NEW COMMUNITY METHODS ---
+
+  // 1. Fetch Posts Stream
+  Stream<List<PostModel>> getPostsStream(String currentUserId) {
+    return _db.collection('posts')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) => PostFactory.createPost(doc.id, doc.data(), currentUserId))
+        .toList());
+  }
+
+  // 2. Add New Post
+  Future<void> createPost(PostModel post) async {
+    await _db.collection('posts').add(post.toJson());
+  }
+
+  // 3. Like/Unlike (UPDATED FOR WINDOWS STABILITY)
+  // Replaced runTransaction with FieldValue.arrayUnion/arrayRemove
+  Future<void> togglePostLike(String postId, String userId, bool shouldLike) async {
+    final ref = _db.collection('posts').doc(postId);
+
+    if (shouldLike) {
+      // Add user to the array atomically
+      await ref.update({
+        'likedBy': FieldValue.arrayUnion([userId])
+      });
+    } else {
+      // Remove user from the array atomically
+      await ref.update({
+        'likedBy': FieldValue.arrayRemove([userId])
+      });
+    }
+  }
+
+  // 4. Add Comment
+  Future<void> addPostComment(String postId, String comment) async {
+    await _db.collection('posts').doc(postId).update({
+      'comments': FieldValue.arrayUnion([comment])
+    });
   }
 }

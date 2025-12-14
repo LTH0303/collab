@@ -1,86 +1,134 @@
+// lib/ViewModel/CommunityViewModel/community_view_model.dart
+
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+// ignore: unused_import
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/CommunityRepository/post_model.dart';
+import '../../models/DatabaseService/database_service.dart';
 
 class CommunityViewModel extends ChangeNotifier {
-  // 状态：帖子列表
+  final DatabaseService _dbService = DatabaseService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
   List<PostModel> _posts = [];
   bool _isLoading = false;
+  String? _currentUserRole;
 
-  // Getter
   List<PostModel> get posts => _posts;
   bool get isLoading => _isLoading;
 
-  // 初始化数据
+  // Initialize and Listen
   void loadPosts() {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
     _isLoading = true;
     notifyListeners();
 
-    // 模拟延迟加载
-    Future.delayed(const Duration(seconds: 1), () {
-      _posts = [
-        PostFactory.createPost({
-          'id': '1',
-          'userName': 'Village Leader',
-          'userRole': 'Kampung Baru',
-          'content': 'Our community hall is now complete!',
-          'imageUrl': 'https://example.com/hall.jpg', // 模拟图片
-          'likeCount': 24,
-          'isLiked': false,
-          'comments': ['Great job!', 'Amazing work team!']
-        }),
-        PostFactory.createPost({
-          'id': '2',
-          'userName': 'Ahmad',
-          'userRole': 'Youth',
-          'content': 'Looking for volunteers for the cleanup drive next Sunday.',
-          'likeCount': 5,
-          'isLiked': false,
-          'comments': []
-        }),
-      ];
-      _isLoading = false;
-      notifyListeners();
+    // 1. Fetch User Role First to apply visibility rules
+    _fetchUserRole(user.uid).then((_) {
+      // 2. Listen to posts stream
+      _dbService.getPostsStream(user.uid).listen((allPosts) {
+
+        _posts = allPosts;
+        _isLoading = false;
+        notifyListeners();
+      });
     });
   }
 
-  // --- 交互逻辑 ---
-
-  // 1. 点赞
-  void toggleLike(String postId) {
-    final post = _posts.firstWhere((p) => p.id == postId);
-    if (post.isLiked) {
-      post.likeCount--;
-      post.isLiked = false;
-    } else {
-      post.likeCount++;
-      post.isLiked = true;
+  Future<void> _fetchUserRole(String uid) async {
+    // We try to get the role from the 'users' collection
+    // If not found, we assume 'participant' for safety
+    try {
+      final userProfile = await _dbService.getUserProfile(uid);
+      if (userProfile != null && userProfile.containsKey('role')) {
+        _currentUserRole = userProfile['role'];
+      } else {
+        _currentUserRole = 'participant';
+      }
+    } catch (e) {
+      _currentUserRole = 'participant';
     }
-    notifyListeners();
   }
 
-  // 2. [新增] 添加评论
-  void addComment(String postId, String commentContent) {
-    final post = _posts.firstWhere((p) => p.id == postId);
-    // 这里为了演示简单，直接存字符串。
-    // 在真实App中，你可能需要存一个 Map 包含 {userName: "Tester", content: ...}
-    post.comments.add(commentContent);
-    notifyListeners();
+  // --- ACTIONS ---
+
+  Future<void> toggleLike(String postId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    // Optimistic Update (UI updates immediately)
+    final index = _posts.indexWhere((p) => p.id == postId);
+    if (index != -1) {
+      final post = _posts[index];
+
+      // Calculate new state logic
+      bool isNowLiked;
+
+      if (post.isLiked) {
+        post.likeCount--;
+        post.isLiked = false;
+        isNowLiked = false;
+      } else {
+        post.likeCount++;
+        post.isLiked = true;
+        isNowLiked = true;
+      }
+      notifyListeners();
+
+      // Actual DB Update
+      // PASS the new state (isNowLiked) to the service
+      try {
+        await _dbService.togglePostLike(postId, user.uid, isNowLiked);
+      } catch (e) {
+        print("Error liking post: $e");
+        // Optional: Revert optimistic update here
+      }
+    }
   }
 
-  // 3. [新增] 发布新贴文
-  void addPost(String content) {
-    // 使用工厂创建新帖子
-    final newPost = PostFactory.createPost({
-      'id': DateTime.now().toString(), // 生成临时ID
-      'userName': 'Tester',            // 暂时写死当前用户
-      'userRole': 'N/A',
-      'content': content,
-      'likeCount': 0,
-      'isLiked': false,
-      'comments': <String>[],
-    });
+  Future<void> addComment(String postId, String commentContent) async {
+    // Add current user name to comment
+    final user = _auth.currentUser;
+    String finalComment = commentContent;
 
-    _posts.insert(0, newPost); // 插到列表最前面
-    notifyListeners(); // 通知 UI 刷新
+    if (user != null) {
+      String name = user.displayName ?? "User";
+      finalComment = "$name: $commentContent";
+    }
+
+    await _dbService.addPostComment(postId, finalComment);
+  }
+
+  Future<void> addPost(String content) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      // 1. Get Real User Data
+      String userName = user.displayName ?? "Unknown";
+      String userRole = _currentUserRole ?? 'participant';
+
+      // 2. Create Model
+      final newPost = TextPostModel(
+        id: '', // DB will assign ID
+        userId: user.uid,
+        userName: userName,
+        userRole: userRole,
+        content: content,
+        timestamp: DateTime.now(),
+        likeCount: 0,
+        isLiked: false,
+        comments: [],
+      );
+
+      // 3. Send to DB
+      await _dbService.createPost(newPost);
+
+    } catch (e) {
+      print("Error adding post: $e");
+    }
   }
 }

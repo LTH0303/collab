@@ -1,30 +1,41 @@
-// 1. 抽象产品 (Abstract Product)
+// lib/models/CommunityRepository/post_model.dart
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+// 1. Abstract Product
 abstract class PostModel {
   final String id;
+  final String userId; // New: Bind to specific user
   final String userName;
   final String userRole;
   final String content;
   int likeCount;
-  bool isLiked;
+  bool isLiked; // Note: In a real app, this depends on the current user. For simple sync, we might load a subcollection or array.
   final List<String> comments;
+  final DateTime timestamp; // New: For sorting
 
   PostModel({
     required this.id,
+    required this.userId,
     required this.userName,
     required this.userRole,
     required this.content,
     this.likeCount = 0,
     this.isLiked = false,
     this.comments = const [],
+    required this.timestamp,
   });
+
+  Map<String, dynamic> toJson();
 }
 
-// 2. 具体产品 A (Concrete Product A): 带图片的帖子
+// 2. Concrete Product A: Image Post
 class ImagePostModel extends PostModel {
   final String imageUrl;
 
   ImagePostModel({
     required super.id,
+    required super.userId,
     required super.userName,
     required super.userRole,
     required super.content,
@@ -32,46 +43,88 @@ class ImagePostModel extends PostModel {
     super.likeCount,
     super.isLiked,
     super.comments,
+    required super.timestamp,
   });
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'type': 'image',
+      'userId': userId,
+      'userName': userName,
+      'userRole': userRole,
+      'content': content,
+      'imageUrl': imageUrl,
+      'likeCount': likeCount,
+      'comments': comments,
+      'timestamp': Timestamp.fromDate(timestamp),
+    };
+  }
 }
 
-// 3. 具体产品 B (Concrete Product B): 纯文字帖子 (或者视频帖子等)
+// 3. Concrete Product B: Text Post
 class TextPostModel extends PostModel {
   TextPostModel({
     required super.id,
+    required super.userId,
     required super.userName,
     required super.userRole,
     required super.content,
     super.likeCount,
     super.isLiked,
     super.comments,
+    required super.timestamp,
   });
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'type': 'text',
+      'userId': userId,
+      'userName': userName,
+      'userRole': userRole,
+      'content': content,
+      'likeCount': likeCount,
+      'comments': comments,
+      'timestamp': Timestamp.fromDate(timestamp),
+    };
+  }
 }
 
-// 4. 工厂类 (The Factory) - 这就是你要的 Design Pattern!
+// 4. Factory
 class PostFactory {
-  /// 工厂方法：根据传入数据的特征，决定生产哪种 Post 对象
-  static PostModel createPost(Map<String, dynamic> json) {
-    if (json.containsKey('imageUrl') && json['imageUrl'] != null) {
+  static PostModel createPost(String docId, Map<String, dynamic> data, String currentUserId) {
+    DateTime time = (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
+
+    // Check if current user liked this post (requires an array of 'likedBy' in DB for robustness,
+    // but for now we'll default false or rely on local state if not persistent)
+    List<dynamic> likedBy = data['likedBy'] ?? [];
+    bool isLikedByMe = likedBy.contains(currentUserId);
+
+    if (data['type'] == 'image' || (data.containsKey('imageUrl') && data['imageUrl'] != null && data['imageUrl'] != '')) {
       return ImagePostModel(
-        id: json['id'],
-        userName: json['userName'],
-        userRole: json['userRole'],
-        content: json['content'],
-        imageUrl: json['imageUrl'],
-        likeCount: json['likeCount'] ?? 0,
-        isLiked: json['isLiked'] ?? false,
-        comments: List<String>.from(json['comments'] ?? []),
+        id: docId,
+        userId: data['userId'] ?? '',
+        userName: data['userName'] ?? 'Unknown',
+        userRole: data['userRole'] ?? 'Participant',
+        content: data['content'] ?? '',
+        imageUrl: data['imageUrl'] ?? '',
+        likeCount: (data['likedBy'] as List?)?.length ?? data['likeCount'] ?? 0,
+        isLiked: isLikedByMe,
+        comments: List<String>.from(data['comments'] ?? []),
+        timestamp: time,
       );
     } else {
       return TextPostModel(
-        id: json['id'],
-        userName: json['userName'],
-        userRole: json['userRole'],
-        content: json['content'],
-        likeCount: json['likeCount'] ?? 0,
-        isLiked: json['isLiked'] ?? false,
-        comments: List<String>.from(json['comments'] ?? []),
+        id: docId,
+        userId: data['userId'] ?? '',
+        userName: data['userName'] ?? 'Unknown',
+        userRole: data['userRole'] ?? 'Participant',
+        content: data['content'] ?? '',
+        likeCount: (data['likedBy'] as List?)?.length ?? data['likeCount'] ?? 0,
+        isLiked: isLikedByMe,
+        comments: List<String>.from(data['comments'] ?? []),
+        timestamp: time,
       );
     }
   }
