@@ -1,9 +1,30 @@
+// lib/View/ParticipantViewInterface/participant_profile_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../Authentication/login_page.dart';
 
 // ===========================================================================
-// 1. STRATEGY PATTERN CLASSES (Logic for Colors & Icons)
+// 1. DATA MODEL (User Profile)
+// ===========================================================================
+class UserProfile {
+  String name;
+  String location;
+  String email;
+  String phone;
+  List<String> skills;
+
+  UserProfile({
+    required this.name,
+    required this.location,
+    required this.email,
+    required this.phone,
+    required this.skills,
+  });
+}
+
+// ===========================================================================
+// 2. STRATEGY PATTERN CLASSES (Logic for Colors & Icons)
 // ===========================================================================
 
 abstract class ReliabilityStrategy {
@@ -57,11 +78,26 @@ class LowReliabilityStrategy implements ReliabilityStrategy {
 }
 
 // ===========================================================================
-// 2. PARTICIPANT PROFILE PAGE (Your Layout + Reliability Button)
+// 3. PARTICIPANT PROFILE PAGE (Stateful for Editing)
 // ===========================================================================
 
-class ParticipantProfilePage extends StatelessWidget {
+class ParticipantProfilePage extends StatefulWidget {
   const ParticipantProfilePage({super.key});
+
+  @override
+  State<ParticipantProfilePage> createState() => _ParticipantProfilePageState();
+}
+
+class _ParticipantProfilePageState extends State<ParticipantProfilePage> {
+
+  // --- STATE: Profile Data ---
+  UserProfile _userProfile = UserProfile(
+    name: "Ahmad bin Ali",
+    location: "Kampung Baru",
+    email: "ali.youth@gmail.com",
+    phone: "+60 19-876 5432",
+    skills: ["Agriculture", "Construction", "Manual Labor"],
+  );
 
   // Helper to determine strategy based on score
   ReliabilityStrategy _getReliabilityStrategy(int score) {
@@ -72,7 +108,7 @@ class ParticipantProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- MOCK DATA: Change this to test colors (e.g., 85, 60, 40) ---
+    // --- MOCK DATA: Change this to test colors ---
     const int currentScore = 85;
     final ReliabilityStrategy strategy = _getReliabilityStrategy(currentScore);
 
@@ -85,6 +121,28 @@ class ParticipantProfilePage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          // --- EDIT BUTTON ---
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, color: Colors.black),
+            onPressed: () async {
+              // Navigate to Edit Page and wait for result
+              final updatedProfile = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EditProfilePage(currentProfile: _userProfile),
+                ),
+              );
+
+              // Update state if data returned
+              if (updatedProfile != null && updatedProfile is UserProfile) {
+                setState(() {
+                  _userProfile = updatedProfile;
+                });
+              }
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -97,9 +155,9 @@ class ParticipantProfilePage extends StatelessWidget {
               child: Icon(Icons.person, size: 50, color: Colors.white),
             ),
             const SizedBox(height: 16),
-            const Text(
-              "Ahmad bin Ali",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black),
+            Text(
+              _userProfile.name,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black),
             ),
 
             // Dynamic Label based on Strategy
@@ -108,7 +166,7 @@ class ParticipantProfilePage extends StatelessWidget {
               children: [
                 Icon(strategy.icon, color: strategy.primaryColor, size: 16),
                 const SizedBox(width: 4),
-                Text(strategy.label, style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+                Text(strategy.label, style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
               ],
             ),
 
@@ -119,9 +177,9 @@ class ParticipantProfilePage extends StatelessWidget {
                 color: const Color(0xFFE3F2FD), // Light Blue pill
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                "Kampung Baru",
-                style: TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold),
+              child: Text(
+                _userProfile.location,
+                style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 30),
@@ -132,14 +190,14 @@ class ParticipantProfilePage extends StatelessWidget {
               children: [
                 _buildStatCard("1", "Active\nJob", Icons.work_outline, Colors.blue),
                 _buildStatCard("RM 850", "Earnings", Icons.account_balance_wallet_outlined, Colors.green),
-                _buildStatCard("5", "Skills", Icons.school_outlined, Colors.orange),
+                _buildStatCard("${_userProfile.skills.length}", "Skills", Icons.school_outlined, Colors.orange),
               ],
             ),
 
             const SizedBox(height: 24),
 
             // =================================================================
-            // NEW: CLICKABLE RELIABILITY SCORE BUTTON (Navigates to Stats Page)
+            // CLICKABLE RELIABILITY SCORE BUTTON (Navigates to Stats Page)
             // =================================================================
             Container(
               decoration: BoxDecoration(
@@ -154,7 +212,6 @@ class ParticipantProfilePage extends StatelessWidget {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
                   onTap: () {
-                    // Navigate to the detailed Stats Page
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -225,9 +282,9 @@ class ParticipantProfilePage extends StatelessWidget {
             _buildSectionContainer(
               title: "Contact Information",
               children: [
-                _buildListTile(Icons.email_outlined, "Email", "ali.youth@gmail.com"),
+                _buildListTile(Icons.email_outlined, "Email", _userProfile.email),
                 const Divider(),
-                _buildListTile(Icons.phone_outlined, "Phone", "+60 19-876 5432"),
+                _buildListTile(Icons.phone_outlined, "Phone", _userProfile.phone),
               ],
             ),
             const SizedBox(height: 16),
@@ -239,11 +296,7 @@ class ParticipantProfilePage extends StatelessWidget {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: [
-                    _buildSkillChip("Agriculture"),
-                    _buildSkillChip("Construction"),
-                    _buildSkillChip("Manual Labor"),
-                  ],
+                  children: _userProfile.skills.map((s) => _buildSkillChip(s)).toList(),
                 )
               ],
             ),
@@ -358,7 +411,124 @@ class ParticipantProfilePage extends StatelessWidget {
 }
 
 // ===========================================================================
-// 3. NEW PAGE: RELIABILITY STATS SCREEN (Details Page)
+// 4. EDIT PROFILE PAGE (New Page)
+// ===========================================================================
+
+class EditProfilePage extends StatefulWidget {
+  final UserProfile currentProfile;
+
+  const EditProfilePage({super.key, required this.currentProfile});
+
+  @override
+  State<EditProfilePage> createState() => _EditProfilePageState();
+}
+
+class _EditProfilePageState extends State<EditProfilePage> {
+  final _formKey = GlobalKey<FormState>();
+
+  late TextEditingController _nameController;
+  late TextEditingController _locationController;
+  late TextEditingController _emailController;
+  late TextEditingController _phoneController;
+  late TextEditingController _skillsController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.currentProfile.name);
+    _locationController = TextEditingController(text: widget.currentProfile.location);
+    _emailController = TextEditingController(text: widget.currentProfile.email);
+    _phoneController = TextEditingController(text: widget.currentProfile.phone);
+    _skillsController = TextEditingController(text: widget.currentProfile.skills.join(", "));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("Edit Profile", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              if (_formKey.currentState!.validate()) {
+                // Return updated profile object
+                final updatedProfile = UserProfile(
+                  name: _nameController.text,
+                  location: _locationController.text,
+                  email: _emailController.text,
+                  phone: _phoneController.text,
+                  skills: _skillsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
+                );
+                Navigator.pop(context, updatedProfile);
+              }
+            },
+            child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          )
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionTitle("Personal Details"),
+              _buildTextField("Full Name", _nameController, Icons.person),
+              _buildTextField("Location", _locationController, Icons.location_on),
+
+              const SizedBox(height: 24),
+              _buildSectionTitle("Contact Info"),
+              _buildTextField("Email", _emailController, Icons.email),
+              _buildTextField("Phone", _phoneController, Icons.phone),
+
+              const SizedBox(height: 24),
+              _buildSectionTitle("Skills"),
+              const Text("Separate skills with commas (e.g. Farming, Driving)", style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 8),
+              _buildTextField("Skills", _skillsController, Icons.school, maxLines: 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {int maxLines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextFormField(
+        controller: controller,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, color: Colors.grey),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+          fillColor: Colors.grey[50],
+        ),
+        validator: (value) => value!.isEmpty ? "Required" : null,
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// 5. RELIABILITY STATS SCREEN
 // ===========================================================================
 
 class ReliabilityStatsPage extends StatelessWidget {
