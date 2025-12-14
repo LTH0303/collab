@@ -102,7 +102,8 @@ class CommunityViewModel extends ChangeNotifier {
     await _dbService.addPostComment(postId, finalComment);
   }
 
-  Future<void> addPost(String content) async {
+  // UPDATED: Now accepts optional imageUrl
+  Future<void> addPost(String content, {String? imageUrl}) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
@@ -112,17 +113,34 @@ class CommunityViewModel extends ChangeNotifier {
       String userRole = _currentUserRole ?? 'participant';
 
       // 2. Create Model
-      final newPost = TextPostModel(
-        id: '', // DB will assign ID
-        userId: user.uid,
-        userName: userName,
-        userRole: userRole,
-        content: content,
-        timestamp: DateTime.now(),
-        likeCount: 0,
-        isLiked: false,
-        comments: [],
-      );
+      PostModel newPost;
+
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        newPost = ImagePostModel(
+          id: '', // DB will assign ID
+          userId: user.uid,
+          userName: userName,
+          userRole: userRole,
+          content: content,
+          imageUrl: imageUrl,
+          timestamp: DateTime.now(),
+          likeCount: 0,
+          isLiked: false,
+          comments: [],
+        );
+      } else {
+        newPost = TextPostModel(
+          id: '', // DB will assign ID
+          userId: user.uid,
+          userName: userName,
+          userRole: userRole,
+          content: content,
+          timestamp: DateTime.now(),
+          likeCount: 0,
+          isLiked: false,
+          comments: [],
+        );
+      }
 
       // 3. Send to DB
       await _dbService.createPost(newPost);
