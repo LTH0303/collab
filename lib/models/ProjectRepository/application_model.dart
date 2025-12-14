@@ -1,6 +1,7 @@
 // lib/models/application_model.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'application_state.dart';
 
 class Application {
   String? id;
@@ -22,6 +23,10 @@ class Application {
     this.status = 'pending',
     required this.appliedAt,
   });
+
+  // --- STATE PATTERN INTEGRATION ---
+  ApplicationState get state => ApplicationState.fromString(status);
+  // --------------------------------
 
   factory Application.fromJson(Map<String, dynamic> json, {String? docId}) {
     return Application(

@@ -2,8 +2,8 @@
 
 import 'package:flutter/material.dart';
 import '../../models/ProjectRepository/i_application_repository.dart';
-import '../../models/application_model.dart';
-import '../../models/project_model.dart';
+import '../../models/ProjectRepository/application_model.dart'; // Updated import
+import '../../models/ProjectRepository/project_model.dart'; // Updated import
 import '../../models/DatabaseService/database_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -77,7 +77,6 @@ class ApplicationViewModel extends ChangeNotifier {
     return _repo.getProjectApplications(projectId);
   }
 
-  // NEW: Get Approved Team List
   Stream<List<Application>> getProjectHiredList(String projectId) {
     return _repo.getProjectApprovedApplications(projectId);
   }
@@ -86,7 +85,7 @@ class ApplicationViewModel extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      await _repo.approveApplication(app);
+      await app.state.approve(app, _repo);
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -96,10 +95,15 @@ class ApplicationViewModel extends ChangeNotifier {
   }
 
   Future<void> rejectApplicant(Application app) async {
+    _isLoading = true;
+    notifyListeners();
     try {
-      await _repo.rejectApplication(app.id!);
+      await app.state.reject(app, _repo);
     } catch (e) {
-      print(e);
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 }

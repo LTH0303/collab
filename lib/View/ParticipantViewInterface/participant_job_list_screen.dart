@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/JobViewModule/job_view_model.dart';
 import '../../ViewModel/ApplicationViewModel/application_view_model.dart';
-import '../../models/project_model.dart';
+import '../../models/ProjectRepository/project_model.dart'; // Updated import
+import '../../models/ProjectRepository/application_state.dart'; // Updated import
 import 'participant_profile_page.dart';
 
 class ParticipantJobBoard extends StatelessWidget {
@@ -123,10 +124,10 @@ class JobCard extends StatelessWidget {
     return FutureBuilder<String?>(
       future: appViewModel.getApplicationStatusForProject(project.id!),
       builder: (context, snapshot) {
-        String? status = snapshot.data;
-        bool isPending = status == 'pending';
-        bool isRejected = status == 'rejected';
-        bool isApproved = status == 'approved';
+        String statusString = snapshot.data ?? 'none';
+        ApplicationState state = ApplicationState.fromString(statusString);
+
+        bool canApply = snapshot.data == null;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -141,7 +142,6 @@ class JobCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Match Badge
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -155,7 +155,6 @@ class JobCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              // Title & Location
               Text(project.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Row(
@@ -173,7 +172,6 @@ class JobCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Info Pills
               Row(
                 children: [
                   _buildInfoPill(Icons.access_time, "Duration", project.timeline),
@@ -183,7 +181,6 @@ class JobCard extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
-              // Buttons
               Row(
                 children: [
                   Expanded(
@@ -199,25 +196,24 @@ class JobCard extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: (isPending || isRejected || isApproved || appViewModel.isLoading)
-                          ? null
-                          : () async {
+                      onPressed: (canApply && !appViewModel.isLoading)
+                          ? () async {
                         bool success = await appViewModel.applyForJob(project);
                         if (success) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Application Sent!")));
                         } else if (appViewModel.error != null) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(appViewModel.error!), backgroundColor: Colors.red));
                         }
-                      },
+                      } : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isRejected ? Colors.red : (isApproved ? Colors.green : const Color(0xFF2E5B3E)),
-                        disabledBackgroundColor: isRejected ? Colors.red.shade100 : Colors.grey.shade300,
+                        backgroundColor: canApply ? const Color(0xFF2E5B3E) : state.displayColor,
+                        disabledBackgroundColor: state.displayColor.withOpacity(0.7),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       child: appViewModel.isLoading
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                           : Text(
-                        isRejected ? "Rejected" : (isApproved ? "Hired" : (isPending ? "Pending" : "Apply Now")),
+                        canApply ? "Apply Now" : state.participantButtonText,
                         style: const TextStyle(color: Colors.white),
                       ),
                     ),
@@ -276,7 +272,6 @@ class JobCard extends StatelessWidget {
               const Text("Milestones Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
 
-              // Safely render milestones
               if (project.milestones.isEmpty)
                 const Text("No milestones defined.", style: TextStyle(color: Colors.grey))
               else

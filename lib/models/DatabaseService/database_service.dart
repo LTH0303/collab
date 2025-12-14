@@ -1,8 +1,8 @@
 // lib/models/DatabaseService/database_service.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/project_model.dart';
-import '../../models/application_model.dart';
+import '../ProjectRepository/project_model.dart';
+import '../ProjectRepository/application_model.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;

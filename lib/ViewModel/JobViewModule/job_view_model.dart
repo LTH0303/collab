@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/DatabaseService/database_service.dart';
-import '../../models/project_model.dart';
+import '../../models/ProjectRepository/project_model.dart';
 
 class JobViewModel extends ChangeNotifier {
   final DatabaseService _dbService;

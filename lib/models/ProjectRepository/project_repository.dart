@@ -3,7 +3,7 @@
 import 'package:firebase_auth/firebase_auth.dart'; // Import this
 import '../AIService/ai_service.dart';
 import '../DatabaseService/database_service.dart';
-import '../../models/project_model.dart';
+import 'project_model.dart';
 import 'i_project_repository.dart';
 
 /// The specific implementation of the Repository.

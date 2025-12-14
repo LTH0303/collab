@@ -1,6 +1,6 @@
 // lib/models/ProjectRepository/i_project_repository.dart
 
-import '../../models/project_model.dart';
+import 'project_model.dart';
 
 /// Abstract Interface for Project Repository
 /// Defines the business capabilities.

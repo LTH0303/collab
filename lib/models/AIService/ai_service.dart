@@ -2,7 +2,7 @@
 
 import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import '../../models/project_model.dart';
+import '../ProjectRepository/project_model.dart';
 
 class AIService {
   late final GenerativeModel _model;

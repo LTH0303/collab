@@ -3,8 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/ApplicationViewModel/application_view_model.dart';
-import '../../models/application_model.dart';
-import 'applicant_profile_view.dart'; // Import the profile view
+import '../../models/ProjectRepository/application_model.dart'; // Updated import
+import 'applicant_profile_view.dart';
 
 class ApplicationListPage extends StatelessWidget {
   const ApplicationListPage({super.key});
@@ -30,6 +30,8 @@ class ApplicationListPage extends StatelessWidget {
             itemCount: snapshot.data!.length,
             itemBuilder: (context, index) {
               final app = snapshot.data![index];
+              final state = app.state;
+
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
@@ -49,7 +51,6 @@ class ApplicationListPage extends StatelessWidget {
                               ],
                             ),
                           ),
-                          // View Profile Button
                           TextButton.icon(
                             onPressed: () {
                               Navigator.push(
@@ -65,22 +66,31 @@ class ApplicationListPage extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          OutlinedButton(
-                            onPressed: () => viewModel.rejectApplicant(app),
-                            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                            child: const Text("Reject"),
+                      if (state.isLeaderActionable)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            OutlinedButton(
+                              onPressed: () => viewModel.rejectApplicant(app),
+                              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                              child: const Text("Reject"),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              onPressed: () => viewModel.approveApplicant(app),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                              child: const Text("Approve"),
+                            ),
+                          ],
+                        )
+                      else
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                              state.labelText,
+                              style: TextStyle(color: state.displayColor, fontWeight: FontWeight.bold)
                           ),
-                          const SizedBox(width: 12),
-                          ElevatedButton(
-                            onPressed: () => viewModel.approveApplicant(app),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                            child: const Text("Approve"),
-                          ),
-                        ],
-                      )
+                        )
                     ],
                   ),
                 ),

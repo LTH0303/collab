@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/ProjectRepository/i_project_repository.dart';
-import '../../models/project_model.dart';
+import '../../models/ProjectRepository/project_model.dart';
 import '../../models/DatabaseService/database_service.dart'; // Direct DB access for count
 
 class PlannerViewModel extends ChangeNotifier {

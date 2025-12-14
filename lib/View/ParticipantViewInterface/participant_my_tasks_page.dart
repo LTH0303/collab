@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/DatabaseService/database_service.dart';
-import '../../models/project_model.dart';
+import '../../models/ProjectRepository/project_model.dart';
 
 class ParticipantMyTasksPage extends StatelessWidget {
   const ParticipantMyTasksPage({super.key});

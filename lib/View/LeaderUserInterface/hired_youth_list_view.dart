@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/ApplicationViewModel/application_view_model.dart';
-import '../../models/application_model.dart';
+import '../../models/ProjectRepository/application_model.dart';
 import 'applicant_profile_view.dart'; // Reuse the profile view
 
 class HiredYouthListView extends StatelessWidget {

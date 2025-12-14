@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/project_model.dart';
+import '../../models/ProjectRepository/project_model.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/JobViewModule/job_view_model.dart';
 

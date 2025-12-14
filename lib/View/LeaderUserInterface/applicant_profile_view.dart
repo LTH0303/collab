@@ -1,24 +1,27 @@
 // lib/View/LeaderUserInterface/applicant_profile_view.dart
 
 import 'package:flutter/material.dart';
-import '../../models/application_model.dart';
+import '../../models/ProjectRepository/application_model.dart'; // Updated import
 import '../../models/DatabaseService/database_service.dart';
 import '../../ViewModel/ApplicationViewModel/application_view_model.dart';
 import 'package:provider/provider.dart';
 
 class ApplicantProfileView extends StatelessWidget {
   final Application application;
-  final bool showActions; // Control visibility of Hire/Reject buttons
+  final bool showActions;
 
   const ApplicantProfileView({
     super.key,
     required this.application,
-    this.showActions = true, // Default to showing buttons
+    this.showActions = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final appViewModel = Provider.of<ApplicationViewModel>(context, listen: false);
+
+    final currentState = application.state;
+    final bool canAct = showActions && currentState.isLeaderActionable;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9FC),
@@ -27,6 +30,26 @@ class ApplicantProfileView extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: currentState.displayColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: currentState.displayColor),
+            ),
+            child: Text(
+              currentState.labelText,
+              style: TextStyle(
+                  color: currentState.displayColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12
+              ),
+            ),
+          )
+        ],
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
         future: DatabaseService().getUserProfile(application.applicantId),
@@ -35,7 +58,6 @@ class ApplicantProfileView extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // Use mock data if real data is missing or null
           final data = snapshot.data ?? {
             'email': 'Loading...',
             'skills': ['General Labor'],
@@ -47,7 +69,6 @@ class ApplicantProfileView extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                // --- Profile Header ---
                 const CircleAvatar(
                   radius: 50,
                   backgroundColor: Color(0xFF1E88E5),
@@ -59,13 +80,12 @@ class ApplicantProfileView extends StatelessWidget {
                   style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  showActions ? "Applied for: ${application.projectTitle}" : "Role: Active Member",
+                  "Project: ${application.projectTitle}",
                   style: const TextStyle(color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
 
-                // --- Stats Row ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
@@ -76,14 +96,11 @@ class ApplicantProfileView extends StatelessWidget {
                 ),
                 const SizedBox(height: 30),
 
-                // --- Skills Section ---
+                // Skills
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -95,14 +112,8 @@ class ApplicantProfileView extends StatelessWidget {
                         children: (data['skills'] as List<dynamic>? ?? ['Hardworking']).map((skill) {
                           return Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE3F2FD),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              skill.toString(),
-                              style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
+                            decoration: BoxDecoration(color: const Color(0xFFE3F2FD), borderRadius: BorderRadius.circular(20)),
+                            child: Text(skill.toString(), style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold, fontSize: 12)),
                           );
                         }).toList(),
                       ),
@@ -111,14 +122,11 @@ class ApplicantProfileView extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // --- Contact Section ---
+                // Contact
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -132,7 +140,7 @@ class ApplicantProfileView extends StatelessWidget {
                       const ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(Icons.phone_outlined, color: Colors.grey),
-                        title: Text("+60 12-345 6789"), // Mock phone
+                        title: Text("+60 12-345 6789"),
                       ),
                     ],
                   ),
@@ -142,8 +150,7 @@ class ApplicantProfileView extends StatelessWidget {
           );
         },
       ),
-      // Conditionally show the bottom actions bar
-      bottomNavigationBar: showActions
+      bottomNavigationBar: canAct
           ? Container(
         padding: const EdgeInsets.all(20),
         color: Colors.white,
@@ -182,7 +189,7 @@ class ApplicantProfileView extends StatelessWidget {
           ],
         ),
       )
-          : null, // No bottom bar if actions are hidden
+          : null,
     );
   }
 

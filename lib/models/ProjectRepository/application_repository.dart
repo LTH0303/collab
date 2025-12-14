@@ -1,7 +1,7 @@
 // lib/models/ProjectRepository/application_repository.dart
 
 import '../DatabaseService/database_service.dart';
-import '../application_model.dart';
+import 'application_model.dart';
 import 'i_application_repository.dart';
 
 class ApplicationRepository implements IApplicationRepository {
