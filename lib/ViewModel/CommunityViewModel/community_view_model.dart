@@ -30,7 +30,6 @@ class CommunityViewModel extends ChangeNotifier {
     _fetchUserRole(user.uid).then((_) {
       // 2. Listen to posts stream
       _dbService.getPostsStream(user.uid).listen((allPosts) {
-
         _posts = allPosts;
         _isLoading = false;
         notifyListeners();
@@ -39,8 +38,6 @@ class CommunityViewModel extends ChangeNotifier {
   }
 
   Future<void> _fetchUserRole(String uid) async {
-    // We try to get the role from the 'users' collection
-    // If not found, we assume 'participant' for safety
     try {
       final userProfile = await _dbService.getUserProfile(uid);
       if (userProfile != null && userProfile.containsKey('role')) {
@@ -53,18 +50,44 @@ class CommunityViewModel extends ChangeNotifier {
     }
   }
 
+  // --- HELPER: Enforce Persona Names ---
+  Future<String> _resolveUserName(User user, String role) async {
+    String userName = user.displayName ?? "";
+
+    // 1. Try fetching from DB if local display name is empty
+    if (userName.isEmpty) {
+      try {
+        final userProfile = await _dbService.getUserProfile(user.uid);
+        if (userProfile != null && userProfile.containsKey('name')) {
+          userName = userProfile['name'];
+        }
+      } catch (e) {
+        print("Error resolving name: $e");
+      }
+    }
+
+    // 2. If still empty, "User", "Unknown" or "Community Member", enforce the Persona Name
+    // This matches the hardcoded names in LeaderProfilePage and ParticipantProfilePage
+    if (userName.isEmpty || userName == "User" || userName == "Unknown" || userName == "Community Member") {
+      if (role == 'leader') {
+        return "Dato' Seri Ahmad";
+      } else {
+        return "Ahmad bin Ali";
+      }
+    }
+
+    return userName;
+  }
+
   // --- ACTIONS ---
 
   Future<void> toggleLike(String postId) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    // Optimistic Update (UI updates immediately)
     final index = _posts.indexWhere((p) => p.id == postId);
     if (index != -1) {
       final post = _posts[index];
-
-      // Calculate new state logic
       bool isNowLiked;
 
       if (post.isLiked) {
@@ -78,46 +101,42 @@ class CommunityViewModel extends ChangeNotifier {
       }
       notifyListeners();
 
-      // Actual DB Update
-      // PASS the new state (isNowLiked) to the service
       try {
         await _dbService.togglePostLike(postId, user.uid, isNowLiked);
       } catch (e) {
         print("Error liking post: $e");
-        // Optional: Revert optimistic update here
       }
     }
   }
 
   Future<void> addComment(String postId, String commentContent) async {
-    // Add current user name to comment
     final user = _auth.currentUser;
     String finalComment = commentContent;
 
     if (user != null) {
-      String name = user.displayName ?? "User";
+      String userRole = _currentUserRole ?? 'participant';
+      String name = await _resolveUserName(user, userRole);
       finalComment = "$name: $commentContent";
     }
 
     await _dbService.addPostComment(postId, finalComment);
   }
 
-  // UPDATED: Now accepts optional imageUrl
   Future<void> addPost(String content, {String? imageUrl}) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
     try {
-      // 1. Get Real User Data
-      String userName = user.displayName ?? "Unknown";
       String userRole = _currentUserRole ?? 'participant';
 
-      // 2. Create Model
+      // Use the helper to get the correct name ("Dato'..." or "Ahmad...")
+      String userName = await _resolveUserName(user, userRole);
+
       PostModel newPost;
 
       if (imageUrl != null && imageUrl.isNotEmpty) {
         newPost = ImagePostModel(
-          id: '', // DB will assign ID
+          id: '',
           userId: user.uid,
           userName: userName,
           userRole: userRole,
@@ -130,7 +149,7 @@ class CommunityViewModel extends ChangeNotifier {
         );
       } else {
         newPost = TextPostModel(
-          id: '', // DB will assign ID
+          id: '',
           userId: user.uid,
           userName: userName,
           userRole: userRole,
@@ -142,7 +161,6 @@ class CommunityViewModel extends ChangeNotifier {
         );
       }
 
-      // 3. Send to DB
       await _dbService.createPost(newPost);
 
     } catch (e) {

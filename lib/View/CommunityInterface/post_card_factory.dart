@@ -2,12 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/CommunityRepository/post_model.dart';
 
 /// --- FACTORY METHOD PATTERN IMPLEMENTATION ---
-/// This class acts as the Factory Creator.
-/// It encapsulates the logic of which UI Widget to create based on the PostModel type.
 class PostCardFactory {
-
-  /// The Factory Method
-  /// Now accepts callbacks for interaction
   static Widget createPostCard({
     required PostModel post,
     required Function(String postId) onLike,
@@ -65,7 +60,7 @@ class ShowcasePostCard extends StatelessWidget {
                     CircleAvatar(
                       backgroundColor: const Color(0xFF2E7D32),
                       child: Text(
-                        post.userName.isNotEmpty ? post.userName[0] : "U",
+                        post.userName.isNotEmpty ? post.userName[0].toUpperCase() : "U",
                         style: const TextStyle(color: Colors.white),
                       ),
                     ),
@@ -74,12 +69,12 @@ class ShowcasePostCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(post.userName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                        Text("${post.userRole} • 2 days ago", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                        Text("${post.userRole} • Just now", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                       ],
                     ),
                   ],
                 ),
-                // "Showcase" Badge (Visual differentiator for this Concrete Product)
+                // "Showcase" Badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
@@ -93,7 +88,7 @@ class ShowcasePostCard extends StatelessWidget {
             ),
           ),
 
-          // Image Content (Specific to this Product)
+          // Image Content
           Container(
             height: 200,
             width: double.infinity,
@@ -119,12 +114,11 @@ class ShowcasePostCard extends StatelessWidget {
             child: Text(post.content, style: const TextStyle(fontSize: 14)),
           ),
 
-          // Footer (Likes/Comments)
+          // Footer (Likes/Comments) - SHARE BUTTON REMOVED
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // LIKE BUTTON
                 InkWell(
@@ -141,6 +135,7 @@ class ShowcasePostCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(width: 24),
                 // COMMENT BUTTON
                 InkWell(
                   onTap: () => onComment(post.id, post.comments),
@@ -151,14 +146,6 @@ class ShowcasePostCard extends StatelessWidget {
                       Text("${post.comments.length} Comments", style: const TextStyle(color: Colors.grey)),
                     ],
                   ),
-                ),
-                // SHARE (Dummy)
-                const Row(
-                  children: [
-                    Icon(Icons.share, size: 20, color: Colors.blue),
-                    SizedBox(width: 4),
-                    Text("Share", style: TextStyle(color: Colors.blue)),
-                  ],
                 ),
               ],
             ),
@@ -200,7 +187,10 @@ class StandardPostCard extends StatelessWidget {
               CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.blueGrey[100],
-                child: Icon(Icons.person, size: 18, color: Colors.blueGrey[700]),
+                child: Text(
+                  post.userName.isNotEmpty ? post.userName[0].toUpperCase() : "U",
+                  style: TextStyle(color: Colors.blueGrey[700], fontWeight: FontWeight.bold),
+                ),
               ),
               const SizedBox(width: 10),
               Column(
