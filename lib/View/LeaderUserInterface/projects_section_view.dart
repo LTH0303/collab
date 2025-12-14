@@ -221,7 +221,10 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                   ),
                 ],
               ),
-            )
+            ),
+            // --- NEW LOCATION: Pending Applications show up here if they exist ---
+            if (project.id != null)
+              _buildPendingApplicationsSection(context, project.id!),
           ],
         ),
       ),
@@ -276,10 +279,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
 
               const SizedBox(height: 20),
 
-              if (project.id != null)
-                _buildPendingApplicationsSection(context, project.id!),
-
-              const Divider(height: 30),
+              // REMOVED PENDING APPLICATIONS SECTION FROM HERE (MOVED TO CARD)
 
               if (!isProjectStarted)
                 Container(
@@ -368,7 +368,6 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 
   void _showUnlockConfirmation(BuildContext context, Project project, int index) {
-    // Capture Messenger
     final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
@@ -518,9 +517,6 @@ class _ProjectsSectionState extends State<ProjectsSection> {
 
   void _handleSubmissionAction(BuildContext context, String projectId, int milestoneIndex, String userId, bool approve) {
     final reasonController = TextEditingController();
-    // Capture messenger here too, although typically we are inside a modal.
-    // Usually safest to rely on the parent scaffold messenger if possible, but
-    // since we are popping the bottom sheet, the context of the bottom sheet builder becomes invalid.
     final messenger = ScaffoldMessenger.of(context);
 
     if (!approve) {
@@ -536,8 +532,8 @@ class _ProjectsSectionState extends State<ProjectsSection> {
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
             ElevatedButton(
               onPressed: () async {
-                Navigator.pop(ctx); // Close dialog
-                Navigator.pop(context); // Close bottom sheet (using outer context)
+                Navigator.pop(ctx);
+                Navigator.pop(context);
 
                 await DatabaseService().reviewMilestoneSubmission(projectId, milestoneIndex, userId, false, reasonController.text);
                 messenger.showSnackBar(const SnackBar(content: Text("Submission Rejected."), backgroundColor: Colors.red));
@@ -548,95 +544,99 @@ class _ProjectsSectionState extends State<ProjectsSection> {
         ),
       );
     } else {
-      Navigator.pop(context); // Close bottom sheet
+      Navigator.pop(context);
 
-      // Async op
       DatabaseService().reviewMilestoneSubmission(projectId, milestoneIndex, userId, true, null)
           .then((_) => messenger.showSnackBar(const SnackBar(content: Text("Submission Approved!"), backgroundColor: Colors.green)))
           .catchError((e) => messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red)));
     }
   }
 
-  // ... (Rest of the file remains similar, existing helpers)
+  // --- REFACTORED: Smart Section ---
   Widget _buildPendingApplicationsSection(BuildContext context, String projectId) {
     final appViewModel = Provider.of<ApplicationViewModel>(context, listen: false);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("Pending Applications", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange)),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 160,
-          child: StreamBuilder<List<Application>>(
-            stream: appViewModel.getProjectApplications(projectId),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-              }
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
-                  child: const Text("No pending applications.", style: TextStyle(color: Colors.grey)),
-                );
-              }
+    return StreamBuilder<List<Application>>(
+      stream: appViewModel.getProjectApplications(projectId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.0),
+            child: LinearProgressIndicator(minHeight: 2),
+          );
+        }
 
-              return ListView.builder(
-                itemCount: snapshot.data!.length,
-                itemBuilder: (context, index) {
-                  final app = snapshot.data![index];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(app.applicantName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  Text("Applied: ${app.appliedAt.toString().substring(0,10)}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                ],
-                              ),
-                              Row(
-                                children: [
-                                  IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => appViewModel.rejectApplicant(app)),
-                                  IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => appViewModel.approveApplicant(app)),
-                                ],
-                              )
-                            ],
-                          ),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ApplicantProfileView(application: app),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.person_search, size: 14),
-                              label: const Text("View Profile", style: TextStyle(fontSize: 12)),
-                              style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+        // Hide completely if no pending applications
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Divider(),
+              const Text("Pending Applications", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.orange)),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 140,
+                child: ListView.builder(
+                  itemCount: snapshot.data!.length,
+                  itemBuilder: (context, index) {
+                    final app = snapshot.data![index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      color: Colors.orange[50], // Slight tint to make it pop
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(app.applicantName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    Text("Applied: ${app.appliedAt.toString().substring(0,10)}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                  ],
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => appViewModel.rejectApplicant(app)),
+                                    IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => appViewModel.approveApplicant(app)),
+                                  ],
+                                )
+                              ],
                             ),
-                          )
-                        ],
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ApplicantProfileView(application: app),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.person_search, size: 14),
+                                label: const Text("View Profile", style: TextStyle(fontSize: 12)),
+                                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                              ),
+                            )
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
-              );
-            },
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
