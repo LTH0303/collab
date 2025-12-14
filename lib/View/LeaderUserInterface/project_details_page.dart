@@ -116,13 +116,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
                         if (project.id != null) {
                           await viewModel.startProject(project.id!);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Project Started! Phase 1 Unlocked."), backgroundColor: Colors.green),
-                            );
-                          }
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text("Project Started! Phase 1 Unlocked."), backgroundColor: Colors.green),
+                          );
                         }
                       },
                     ),
@@ -305,7 +304,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  // --- KPI & Actions Sections (Same as before) ---
+  // --- KPI & Actions Sections ---
 
   Widget _buildLiveKPIs(ProjectDetailsViewModel viewModel, Project project) {
     return Column(
@@ -416,12 +415,16 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
+  // --- Dialogs ---
+
   void _showCompleteMilestoneDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex) {
     final milestone = viewModel.project?.milestones[milestoneIndex];
     if (milestone == null) return;
+    // Capture messenger here
+    final messenger = ScaffoldMessenger.of(context);
 
     if (!milestone.canBeCompleted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text("Cannot complete milestone: Pending submissions exist."), backgroundColor: Colors.orange),
       );
       return;
@@ -438,13 +441,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             onPressed: () async {
               Navigator.pop(ctx);
               await viewModel.completeMilestone(projectId, milestoneIndex);
-              if (ctx.mounted) {
-                if (viewModel.error != null) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(viewModel.error!), backgroundColor: Colors.red));
-                } else {
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Milestone completed!"), backgroundColor: Colors.green));
-                }
-              }
+              messenger.showSnackBar(const SnackBar(content: Text("Milestone completed!"), backgroundColor: Colors.green));
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text("Complete"),
@@ -576,6 +573,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   void _showApproveDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final commentController = TextEditingController();
+    // CAPTURE MESSENGER CONTEXT HERE (Parent of dialog)
+    final messenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -589,11 +589,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () async {
+              // 1. Close Dialog
               Navigator.pop(ctx);
+
+              // 2. Call VM (Optimistic Update)
               await viewModel.approveSubmission(projectId, milestoneIndex, userId, comment: commentController.text);
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Submission approved!"), backgroundColor: Colors.green));
-              }
+
+              // 3. Show SnackBar using captured messenger
+              messenger.showSnackBar(const SnackBar(content: Text("Submission approved!"), backgroundColor: Colors.green));
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text("Approve"),
@@ -605,6 +608,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   void _showRejectDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final reasonController = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -621,9 +626,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
               if (reasonController.text.isEmpty) return;
               Navigator.pop(ctx);
               await viewModel.rejectSubmission(projectId, milestoneIndex, userId, reasonController.text);
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("Submission rejected"), backgroundColor: Colors.red));
-              }
+              messenger.showSnackBar(const SnackBar(content: Text("Submission rejected"), backgroundColor: Colors.red));
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text("Reject"),

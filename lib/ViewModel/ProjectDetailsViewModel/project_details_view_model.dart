@@ -21,7 +21,6 @@ class ProjectDetailsViewModel extends ChangeNotifier {
 
   // --- INITIALIZATION ---
 
-  // Start listening to the project document
   void listenToProject(String projectId) {
     _isLoading = true;
     _error = null;
@@ -46,7 +45,6 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Stop listening when leaving the page
   @override
   void dispose() {
     _projectSubscription?.cancel();
@@ -55,21 +53,17 @@ class ProjectDetailsViewModel extends ChangeNotifier {
 
   // --- CALCULATIONS & GETTERS ---
 
-  // Check if project is started (Phase 1 is open or completed)
   bool get isProjectStarted {
     if (_project == null || _project!.milestones.isEmpty) return false;
-    // It is started if the first milestone is NOT locked
     return _project!.milestones[0].isOpen || _project!.milestones[0].isCompleted;
   }
 
-  // Calculate Milestone Progress (%)
   double get milestoneProgress {
     if (_project == null || _project!.milestones.isEmpty) return 0.0;
     int completed = _project!.milestones.where((m) => m.isCompleted).length;
     return (completed / _project!.milestones.length) * 100;
   }
 
-  // Calculate Youth Participation (%)
   double get youthParticipation {
     if (_project == null || _project!.activeParticipants.isEmpty) return 0.0;
 
@@ -93,60 +87,79 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     return (totalSubmissions / totalExpected) * 100;
   }
 
-  // Get total pending submissions count across all milestones
   int get totalPendingSubmissions {
     if (_project == null) return 0;
     return _project!.milestones.fold(0, (sum, m) => sum + m.pendingSubmissionsCount);
   }
 
-  // Check if project is completed (all milestones completed)
   bool get isProjectCompleted {
     if (_project == null || _project!.milestones.isEmpty) return false;
     return _project!.milestones.every((m) => m.isCompleted);
   }
 
-  // --- ACTIONS ---
+  // --- ACTIONS (With Optimistic Updates) ---
 
-  // START PROJECT
   Future<void> startProject(String projectId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    // 1. Optimistic Update
+    if (_project != null && _project!.milestones.isNotEmpty) {
+      _project!.milestones[0].status = 'open';
+      notifyListeners();
+    }
 
+    // 2. DB Call
     try {
       await _dbService.startProject(projectId);
-      // Stream will update the UI
     } catch (e) {
       _error = e.toString();
-      _isLoading = false;
       notifyListeners();
     }
   }
 
   Future<void> approveSubmission(String projectId, int milestoneIndex, String userId, {String? comment}) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    // 1. Optimistic Update
+    if (_project != null && milestoneIndex < _project!.milestones.length) {
+      try {
+        final milestone = _project!.milestones[milestoneIndex];
+        final subIndex = milestone.submissions.indexWhere((s) => s.userId == userId);
+        if (subIndex != -1) {
+          milestone.submissions[subIndex].status = 'approved';
+          notifyListeners(); // Update UI immediately
+        }
+      } catch (e) {
+        print("Optimistic update failed: $e");
+      }
+    }
 
+    // 2. DB Call
     try {
       await _dbService.reviewMilestoneSubmission(projectId, milestoneIndex, userId, true, comment);
     } catch (e) {
       _error = e.toString();
-      _isLoading = false;
       notifyListeners();
     }
   }
 
   Future<void> rejectSubmission(String projectId, int milestoneIndex, String userId, String reason) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    // 1. Optimistic Update
+    if (_project != null && milestoneIndex < _project!.milestones.length) {
+      try {
+        final milestone = _project!.milestones[milestoneIndex];
+        final subIndex = milestone.submissions.indexWhere((s) => s.userId == userId);
+        if (subIndex != -1) {
+          milestone.submissions[subIndex].status = 'rejected';
+          milestone.submissions[subIndex].rejectionReason = reason;
+          notifyListeners(); // Update UI immediately
+        }
+      } catch (e) {
+        print("Optimistic update failed: $e");
+      }
+    }
 
+    // 2. DB Call
     try {
       await _dbService.reviewMilestoneSubmission(projectId, milestoneIndex, userId, false, reason);
     } catch (e) {
       _error = e.toString();
-      _isLoading = false;
       notifyListeners();
     }
   }
@@ -154,22 +167,19 @@ class ProjectDetailsViewModel extends ChangeNotifier {
   Future<void> completeMilestone(String projectId, int milestoneIndex) async {
     if (_project == null) return;
 
-    final milestone = _project!.milestones[milestoneIndex];
-    if (!milestone.canBeCompleted) {
-      _error = "Cannot complete milestone: Some submissions are still pending review.";
+    // 1. Optimistic Update
+    if (milestoneIndex < _project!.milestones.length) {
+      _project!.milestones[milestoneIndex].status = 'completed';
+      if (milestoneIndex + 1 < _project!.milestones.length) {
+        _project!.milestones[milestoneIndex + 1].status = 'open';
+      }
       notifyListeners();
-      return;
     }
-
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
 
     try {
       await _dbService.completeMilestone(projectId, milestoneIndex);
     } catch (e) {
       _error = e.toString();
-      _isLoading = false;
       notifyListeners();
     }
   }
