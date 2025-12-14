@@ -75,7 +75,7 @@ class MilestoneSubmission {
   String userName;
   String expenseClaimed;
   String proofImageUrl;
-  String status; // 'pending', 'approved', 'rejected'
+  String status; // 'pending', 'approved', 'rejected', 'missed'
   String? rejectionReason;
   DateTime submittedAt;
 
@@ -169,6 +169,15 @@ class Milestone {
 
   bool get hasPendingReviews => submissions.any((s) => s.status == 'pending');
   bool get hasApprovedSubmissions => submissions.any((s) => s.status == 'approved');
+
+  // Check if milestone can be marked as completed
+  bool get canBeCompleted {
+    if (submissions.isEmpty) return false;
+    return submissions.every((s) => s.status != 'pending');
+  }
+
+  // Get count of pending submissions
+  int get pendingSubmissionsCount => submissions.where((s) => s.status == 'pending').length;
 
   // Helper to calculate total claimed from approved submissions
   double get totalApprovedExpenses {

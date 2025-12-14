@@ -307,4 +307,96 @@ class DatabaseService {
       'reliability': 'High'
     };
   }
+
+  // --- PROJECT DETAILS METHODS ---
+
+  Future<Project?> getProjectById(String projectId) async {
+    try {
+      final doc = await _db.collection('projects').doc(projectId).get();
+      if (doc.exists) {
+        return Project.fromJson(doc.data()!, docId: doc.id);
+      }
+      return null;
+    } catch (e) {
+      print("Error getting project: $e");
+      return null;
+    }
+  }
+
+  Stream<Project?> streamProject(String projectId) {
+    return _db.collection('projects').doc(projectId).snapshots().map((doc) {
+      if (doc.exists) {
+        return Project.fromJson(doc.data()!, docId: doc.id);
+      }
+      return null;
+    });
+  }
+
+  Future<void> markSubmissionAsMissed(String projectId, int milestoneIndex, String userId) async {
+    DocumentReference projectRef = _db.collection('projects').doc(projectId);
+
+    try {
+      DocumentSnapshot snapshot = await projectRef.get();
+      if (!snapshot.exists) throw Exception("Project not found");
+
+      Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
+      List<dynamic> rawMilestones = data['milestones'] ?? [];
+      List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
+
+      if (milestoneIndex < milestones.length) {
+        var milestone = milestones[milestoneIndex];
+        int subIndex = milestone.submissions.indexWhere((s) => s.userId == userId && s.status == 'pending');
+
+        if (subIndex != -1) {
+          milestone.submissions[subIndex].status = 'missed';
+          milestone.submissions[subIndex].rejectionReason = 'Submission marked as missed (past due)';
+        }
+
+        await projectRef.update({
+          'milestones': milestones.map((m) => m.toJson()).toList()
+        });
+      }
+    } catch (e) {
+      print("Error marking submission as missed: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> completeMilestone(String projectId, int milestoneIndex) async {
+    DocumentReference projectRef = _db.collection('projects').doc(projectId);
+
+    try {
+      DocumentSnapshot snapshot = await projectRef.get();
+      if (!snapshot.exists) throw Exception("Project not found");
+
+      Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
+      List<dynamic> rawMilestones = data['milestones'] ?? [];
+      List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
+
+      if (milestoneIndex < milestones.length) {
+        var milestone = milestones[milestoneIndex];
+
+        // Verify all submissions are reviewed
+        if (milestone.submissions.any((s) => s.status == 'pending')) {
+          throw Exception("Cannot complete milestone: Some submissions are still pending.");
+        }
+
+        // Mark milestone as completed
+        milestone.status = 'completed';
+
+        // Unlock next milestone if exists
+        int nextIndex = milestoneIndex + 1;
+        if (nextIndex < milestones.length) {
+          milestones[nextIndex].status = 'open';
+        }
+
+        await projectRef.update({
+          'milestones': milestones.map((m) => m.toJson()).toList()
+        });
+      }
+    } catch (e) {
+      print("Error completing milestone: $e");
+      rethrow;
+    }
+  }
 }

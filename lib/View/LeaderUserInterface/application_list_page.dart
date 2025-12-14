@@ -7,16 +7,23 @@ import '../../models/ProjectRepository/application_model.dart'; // Updated impor
 import 'applicant_profile_view.dart';
 
 class ApplicationListPage extends StatelessWidget {
-  const ApplicationListPage({super.key});
+  final String? projectId;
+  final String? projectTitle;
+
+  const ApplicationListPage({super.key, this.projectId, this.projectTitle});
 
   @override
   Widget build(BuildContext context) {
     final viewModel = Provider.of<ApplicationViewModel>(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Pending Applications")),
+      appBar: AppBar(
+        title: Text(projectTitle != null ? "Applications: $projectTitle" : "Pending Applications"),
+      ),
       body: StreamBuilder<List<Application>>(
-        stream: viewModel.getLeaderApplications(),
+        stream: projectId != null
+            ? viewModel.getProjectApplications(projectId!)
+            : viewModel.getLeaderApplications(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
