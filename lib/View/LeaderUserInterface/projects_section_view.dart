@@ -10,6 +10,7 @@ import '../../models/ProjectRepository/application_model.dart';
 import '../../models/DatabaseService/database_service.dart';
 import 'applicant_profile_view.dart';
 import 'hired_youth_list_view.dart';
+import 'project_details_page.dart';
 
 class ProjectsSection extends StatefulWidget {
   const ProjectsSection({super.key});
@@ -156,52 +157,53 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   Widget _buildActiveCard(BuildContext context, Project project) {
     bool hasPendingReview = project.milestones.any((m) => m.hasPendingReviews);
     bool isProjectStarted = project.milestones.isNotEmpty && (project.milestones[0].isOpen || project.milestones[0].isCompleted);
+    final appViewModel = Provider.of<ApplicationViewModel>(context, listen: false);
 
-    return GestureDetector(
-      onTap: () => _showActiveProjectDetails(context, project, isProjectStarted),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [Color(0xFF1E88E5), Color(0xFF1565C0)]),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [Color(0xFF1E88E5), Color(0xFF1565C0)]),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
+                  child: const Text("Active", style: TextStyle(color: Colors.white, fontSize: 10)),
+                ),
+                if (hasPendingReview)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
-                    child: const Text("Active", style: TextStyle(color: Colors.white, fontSize: 10)),
+                    decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(8)),
+                    child: const Text("REVIEW NEEDED", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  )
+                else if (!isProjectStarted)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(8)),
+                    child: const Text("NOT STARTED", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
-                  if (hasPendingReview)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(8)),
-                      child: const Text("REVIEW NEEDED", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    )
-                  else if (!isProjectStarted)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(8)),
-                      child: const Text("NOT STARTED", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
-                ],
-              ),
+              ],
             ),
-            Padding(
+          ),
+          GestureDetector(
+            onTap: () => _showActiveProjectDetails(context, project, isProjectStarted),
+            child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,11 +224,253 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                 ],
               ),
             ),
-            // --- NEW LOCATION: Pending Applications show up here if they exist ---
-            if (project.id != null)
-              _buildPendingApplicationsSection(context, project.id!),
+          ),
+          // Action Buttons - Wrap in GestureDetector to stop event propagation
+          GestureDetector(
+            onTap: () {}, // Empty handler to stop propagation
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: StreamBuilder<List<Application>>(
+                      stream: appViewModel.getProjectApplications(project.id!),
+                      builder: (context, snapshot) {
+                        int pendingAppCount = snapshot.hasData ? snapshot.data!.length : 0;
+                        return ElevatedButton.icon(
+                          onPressed: pendingAppCount > 0
+                              ? () => _navigateToPendingApprovals(context, project)
+                              : null,
+                          icon: const Icon(Icons.pending_actions, size: 18),
+                          label: Text("Pending Approvals${pendingAppCount > 0 ? ' ($pendingAppCount)' : ''}"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: pendingAppCount > 0 ? Colors.orange : Colors.grey.shade300,
+                            foregroundColor: pendingAppCount > 0 ? Colors.white : Colors.grey.shade600,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _navigateToProjectDetails(context, project),
+                      icon: const Icon(Icons.visibility, size: 18),
+                      label: const Text("View Details"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToPendingApprovals(BuildContext context, Project project) {
+    // Show applications list as popup modal
+    if (project.id != null) {
+      _showPendingApplicationsPopup(context, project.id!, project.title);
+    }
+  }
+
+  void _showPendingApplicationsPopup(BuildContext context, String projectId, String projectTitle) {
+    final appViewModel = Provider.of<ApplicationViewModel>(context, listen: false);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    "Pending Applications",
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: StreamBuilder<List<Application>>(
+                stream: appViewModel.getProjectApplications(projectId),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        "No pending applications.",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    itemCount: snapshot.data!.length,
+                    itemBuilder: (context, index) {
+                      final app = snapshot.data![index];
+                      final state = app.state;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              // Applicant Name
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      app.applicantName.isNotEmpty && app.applicantName != "Unknown"
+                                          ? app.applicantName
+                                          : "Participant ${app.applicantId.substring(0, 8)}...",
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "Applied: ${app.appliedAt.toString().substring(0, 10)}",
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Action Buttons
+                              if (state.isLeaderActionable)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => ApplicantProfileView(application: app),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.visibility_outlined, size: 20),
+                                      color: Colors.blue,
+                                      tooltip: "View Profile",
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      onPressed: () => appViewModel.rejectApplicant(app),
+                                      icon: const Icon(Icons.close, size: 20),
+                                      color: Colors.red,
+                                      tooltip: "Reject",
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: Colors.red.shade50,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      onPressed: () => appViewModel.approveApplicant(app),
+                                      icon: const Icon(Icons.check, size: 20),
+                                      color: Colors.green,
+                                      tooltip: "Approve",
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: Colors.green.shade50,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              else
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => ApplicantProfileView(application: app),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.visibility_outlined, size: 20),
+                                      color: Colors.blue,
+                                      tooltip: "View Profile",
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: state.displayColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        state.labelText,
+                                        style: TextStyle(
+                                          color: state.displayColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _navigateToProjectDetails(BuildContext context, Project project) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProjectDetailsPage(project: project),
       ),
     );
   }
@@ -552,93 +796,6 @@ class _ProjectsSectionState extends State<ProjectsSection> {
     }
   }
 
-  // --- REFACTORED: Smart Section ---
-  Widget _buildPendingApplicationsSection(BuildContext context, String projectId) {
-    final appViewModel = Provider.of<ApplicationViewModel>(context, listen: false);
-
-    return StreamBuilder<List<Application>>(
-      stream: appViewModel.getProjectApplications(projectId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.0),
-            child: LinearProgressIndicator(minHeight: 2),
-          );
-        }
-
-        // Hide completely if no pending applications
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        return Padding(
-          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Divider(),
-              const Text("Pending Applications", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.orange)),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 140,
-                child: ListView.builder(
-                  itemCount: snapshot.data!.length,
-                  itemBuilder: (context, index) {
-                    final app = snapshot.data![index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      color: Colors.orange[50], // Slight tint to make it pop
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(app.applicantName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    Text("Applied: ${app.appliedAt.toString().substring(0,10)}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => appViewModel.rejectApplicant(app)),
-                                    IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => appViewModel.approveApplicant(app)),
-                                  ],
-                                )
-                              ],
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton.icon(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ApplicantProfileView(application: app),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.person_search, size: 14),
-                                label: const Text("View Profile", style: TextStyle(fontSize: 12)),
-                                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                              ),
-                            )
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
 
 // ... DraftInlineEditorCard (Same as before)
