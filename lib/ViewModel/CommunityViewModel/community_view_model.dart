@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../models/Community/post_model.dart';
+import '../../models/CommunityRepository/post_model.dart';
 
 class CommunityViewModel extends ChangeNotifier {
   // 状态：帖子列表

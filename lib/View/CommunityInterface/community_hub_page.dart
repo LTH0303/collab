@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 // 请确保路径正确引入你的 ViewModel 和 Model
 import '../../ViewModel/CommunityViewModel/community_view_model.dart';
-import '../../models/Community/post_model.dart';
+import '../../models/CommunityRepository/post_model.dart';
 
 class CommunityHubPage extends StatefulWidget {
   const CommunityHubPage({super.key});
@@ -221,7 +221,7 @@ class _CommunityHubPageState extends State<CommunityHubPage> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("Community Showcase", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        const Text("CommunityRepository Showcase", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                         // [新增] 这里的 + 号现在可以点击了
                         InkWell(
                           onTap: _showAddPostSheet,
