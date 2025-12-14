@@ -1,7 +1,8 @@
 // lib/ViewModel/ProjectDetailsViewModel/project_details_view_model.dart
 
-import 'dart:async'; // Import for StreamSubscription
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../../models/ProjectRepository/project_model.dart';
 import '../../models/DatabaseService/database_service.dart';
 
@@ -12,7 +13,6 @@ class ProjectDetailsViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
-  // Manage the subscription internally
   StreamSubscription<Project?>? _projectSubscription;
 
   Project? get project => _project;
@@ -28,14 +28,19 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     _projectSubscription?.cancel();
     _projectSubscription = _dbService.streamProject(projectId).listen(
           (updatedProject) {
-        _project = updatedProject;
-        _isLoading = false;
-        notifyListeners();
+        // Safe UI Update
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _project = updatedProject;
+          _isLoading = false;
+          notifyListeners();
+        });
       },
       onError: (e) {
-        _error = e.toString();
-        _isLoading = false;
-        notifyListeners();
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _error = e.toString();
+          _isLoading = false;
+          notifyListeners();
+        });
       },
     );
   }
@@ -51,7 +56,7 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     super.dispose();
   }
 
-  // --- CALCULATIONS & GETTERS ---
+  // --- GETTERS ---
 
   bool get isProjectStarted {
     if (_project == null || _project!.milestones.isEmpty) return false;
@@ -66,24 +71,15 @@ class ProjectDetailsViewModel extends ChangeNotifier {
 
   double get youthParticipation {
     if (_project == null || _project!.activeParticipants.isEmpty) return 0.0;
-
     int totalParticipants = _project!.activeParticipants.length;
     int currentMilestoneIndex = _project!.milestones.indexWhere((m) => m.isOpen);
-
-    int milestonesToCount = currentMilestoneIndex == -1
-        ? _project!.milestones.length
-        : currentMilestoneIndex + 1;
-
+    int milestonesToCount = currentMilestoneIndex == -1 ? _project!.milestones.length : currentMilestoneIndex + 1;
     int totalExpected = totalParticipants * milestonesToCount;
     if (totalExpected == 0) return 0.0;
-
     int totalSubmissions = 0;
     for (int i = 0; i < milestonesToCount && i < _project!.milestones.length; i++) {
-      totalSubmissions += _project!.milestones[i].submissions
-          .where((s) => s.status != 'pending')
-          .length;
+      totalSubmissions += _project!.milestones[i].submissions.where((s) => s.status != 'pending').length;
     }
-
     return (totalSubmissions / totalExpected) * 100;
   }
 
@@ -100,13 +96,10 @@ class ProjectDetailsViewModel extends ChangeNotifier {
   // --- ACTIONS ---
 
   Future<void> startProject(String projectId) async {
-    // 1. Optimistic Update
     if (_project != null && _project!.milestones.isNotEmpty) {
       _project!.milestones[0].status = 'open';
       notifyListeners();
     }
-
-    // 2. DB Call
     try {
       await _dbService.startProject(projectId);
     } catch (e) {
@@ -126,7 +119,7 @@ class ProjectDetailsViewModel extends ChangeNotifier {
           notifyListeners();
         }
       } catch (e) {
-        print("Optimistic update failed: $e");
+        print("Optimistic update error: $e");
       }
     }
 
@@ -140,7 +133,6 @@ class ProjectDetailsViewModel extends ChangeNotifier {
   }
 
   Future<void> rejectSubmission(String projectId, int milestoneIndex, String userId, String reason) async {
-    // 1. Optimistic Update
     if (_project != null && milestoneIndex < _project!.milestones.length) {
       try {
         final milestone = _project!.milestones[milestoneIndex];
@@ -151,11 +143,10 @@ class ProjectDetailsViewModel extends ChangeNotifier {
           notifyListeners();
         }
       } catch (e) {
-        print("Optimistic update failed: $e");
+        print("Optimistic update error: $e");
       }
     }
 
-    // 2. DB Call
     try {
       await _dbService.reviewMilestoneSubmission(projectId, milestoneIndex, userId, false, reason);
     } catch (e) {
@@ -167,10 +158,8 @@ class ProjectDetailsViewModel extends ChangeNotifier {
   Future<void> completeMilestone(String projectId, int milestoneIndex) async {
     if (_project == null) return;
 
-    // 1. Optimistic Update
     if (milestoneIndex < _project!.milestones.length) {
       _project!.milestones[milestoneIndex].status = 'completed';
-      // Unlock next
       if (milestoneIndex + 1 < _project!.milestones.length) {
         _project!.milestones[milestoneIndex + 1].status = 'open';
       }
@@ -185,10 +174,9 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     }
   }
 
-  // NEW: Force finalize
   Future<void> finalizeProject(String projectId) async {
     if (_project != null) {
-      _project!.status = 'completed'; // Optimistic
+      _project!.status = 'completed';
       notifyListeners();
     }
     try {

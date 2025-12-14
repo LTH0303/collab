@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../Authentication/login_page.dart';
 
 // ===========================================================================
@@ -13,6 +14,7 @@ class UserProfile {
   String email;
   String phone;
   List<String> skills;
+  int reliabilityScore;
 
   UserProfile({
     required this.name,
@@ -20,57 +22,66 @@ class UserProfile {
     required this.email,
     required this.phone,
     required this.skills,
+    required this.reliabilityScore,
   });
+
+  factory UserProfile.fromMap(Map<String, dynamic> data) {
+    return UserProfile(
+      name: data['name'] ?? 'Participant',
+      location: data['village'] ?? 'Unknown Location',
+      email: data['email'] ?? '',
+      phone: data['phone'] ?? '+60 12-345 6789',
+      skills: List<String>.from(data['skills'] ?? []),
+      reliabilityScore: data['reliability_score'] ?? 100,
+    );
+  }
 }
 
 // ===========================================================================
-// 2. STRATEGY PATTERN CLASSES (Logic for Colors & Icons)
+// 2. STRATEGY PATTERN CLASSES
 // ===========================================================================
 
 abstract class ReliabilityStrategy {
   String get label;
-  Color get primaryColor;      // Text & Icon color
-  Color get backgroundColor;   // Button/Card background color
-  Color get barColor;          // Progress bar color
+  Color get primaryColor;
+  Color get backgroundColor;
+  Color get barColor;
   IconData get icon;
 }
 
-// Green Strategy (Score >= 80)
 class HighReliabilityStrategy implements ReliabilityStrategy {
   @override
   String get label => "High Reliability";
   @override
-  Color get primaryColor => const Color(0xFF2E7D32); // Dark Green
+  Color get primaryColor => const Color(0xFF2E7D32);
   @override
-  Color get backgroundColor => const Color(0xFFE8F5E9); // Light Green
+  Color get backgroundColor => const Color(0xFFE8F5E9);
   @override
   Color get barColor => const Color(0xFF43A047);
   @override
   IconData get icon => Icons.verified_user;
 }
 
-// Amber Strategy (Score 50-79)
 class MediumReliabilityStrategy implements ReliabilityStrategy {
   @override
   String get label => "Medium Reliability";
   @override
-  Color get primaryColor => const Color(0xFFFFA000); // Dark Amber
+  Color get primaryColor => const Color(0xFFFFA000);
   @override
-  Color get backgroundColor => const Color(0xFFFFF8E1); // Light Amber
+  Color get backgroundColor => const Color(0xFFFFF8E1);
   @override
   Color get barColor => const Color(0xFFFFC107);
   @override
   IconData get icon => Icons.star_half;
 }
 
-// Red Strategy (Score < 50)
 class LowReliabilityStrategy implements ReliabilityStrategy {
   @override
   String get label => "Needs Improvement";
   @override
-  Color get primaryColor => const Color(0xFFC62828); // Dark Red
+  Color get primaryColor => const Color(0xFFC62828);
   @override
-  Color get backgroundColor => const Color(0xFFFFEBEE); // Light Red
+  Color get backgroundColor => const Color(0xFFFFEBEE);
   @override
   Color get barColor => const Color(0xFFE57373);
   @override
@@ -78,28 +89,12 @@ class LowReliabilityStrategy implements ReliabilityStrategy {
 }
 
 // ===========================================================================
-// 3. PARTICIPANT PROFILE PAGE (Stateful for Editing)
+// 3. PARTICIPANT PROFILE PAGE
 // ===========================================================================
 
-class ParticipantProfilePage extends StatefulWidget {
+class ParticipantProfilePage extends StatelessWidget {
   const ParticipantProfilePage({super.key});
 
-  @override
-  State<ParticipantProfilePage> createState() => _ParticipantProfilePageState();
-}
-
-class _ParticipantProfilePageState extends State<ParticipantProfilePage> {
-
-  // --- STATE: Profile Data ---
-  UserProfile _userProfile = UserProfile(
-    name: "Ahmad bin Ali",
-    location: "Kampung Baru",
-    email: "ali.youth@gmail.com",
-    phone: "+60 19-876 5432",
-    skills: ["Agriculture", "Construction", "Manual Labor"],
-  );
-
-  // Helper to determine strategy based on score
   ReliabilityStrategy _getReliabilityStrategy(int score) {
     if (score >= 80) return HighReliabilityStrategy();
     if (score >= 50) return MediumReliabilityStrategy();
@@ -108,9 +103,11 @@ class _ParticipantProfilePageState extends State<ParticipantProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    // --- MOCK DATA: Change this to test colors ---
-    const int currentScore = 85;
-    final ReliabilityStrategy strategy = _getReliabilityStrategy(currentScore);
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Center(child: Text("Please login first"));
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9FC),
@@ -121,213 +118,202 @@ class _ParticipantProfilePageState extends State<ParticipantProfilePage> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          // --- EDIT BUTTON ---
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, color: Colors.black),
-            onPressed: () async {
-              // Navigate to Edit Page and wait for result
-              final updatedProfile = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => EditProfilePage(currentProfile: _userProfile),
-                ),
-              );
-
-              // Update state if data returned
-              if (updatedProfile != null && updatedProfile is UserProfile) {
-                setState(() {
-                  _userProfile = updatedProfile;
-                });
-              }
-            },
-          ),
-        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          children: [
-            // --- 1. Header Profile ---
-            const CircleAvatar(
-              radius: 45,
-              backgroundColor: Color(0xFF1E88E5), // Blue for Youth
-              child: Icon(Icons.person, size: 50, color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _userProfile.name,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black),
-            ),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            // Dynamic Label based on Strategy
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return const Center(child: Text("User data not found"));
+          }
+
+          final userProfile = UserProfile.fromMap(snapshot.data!.data() as Map<String, dynamic>);
+          final strategy = _getReliabilityStrategy(userProfile.reliabilityScore);
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
               children: [
-                Icon(strategy.icon, color: strategy.primaryColor, size: 16),
-                const SizedBox(width: 4),
-                Text(strategy.label, style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
-              ],
-            ),
+                const CircleAvatar(
+                  radius: 45,
+                  backgroundColor: Color(0xFF1E88E5),
+                  child: Icon(Icons.person, size: 50, color: Colors.white),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  userProfile.name,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black),
+                ),
 
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE3F2FD), // Light Blue pill
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                _userProfile.location,
-                style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(strategy.icon, color: strategy.primaryColor, size: 16),
+                    const SizedBox(width: 4),
+                    Text(strategy.label, style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  ],
+                ),
 
-            // --- 2. Stats Row ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildStatCard("1", "Active\nJob", Icons.work_outline, Colors.blue),
-                _buildStatCard("RM 850", "Earnings", Icons.account_balance_wallet_outlined, Colors.green),
-                _buildStatCard("${_userProfile.skills.length}", "Skills", Icons.school_outlined, Colors.orange),
-              ],
-            ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE3F2FD),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    userProfile.location,
+                    style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 30),
 
-            const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildStatCard("1", "Active\nJob", Icons.work_outline, Colors.blue),
+                    _buildStatCard("RM 850", "Earnings", Icons.account_balance_wallet_outlined, Colors.green),
+                    _buildStatCard("${userProfile.skills.length}", "Skills", Icons.school_outlined, Colors.orange),
+                  ],
+                ),
 
-            // =================================================================
-            // CLICKABLE RELIABILITY SCORE BUTTON (Navigates to Stats Page)
-            // =================================================================
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(color: strategy.primaryColor.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ReliabilityStatsPage(score: currentScore, strategy: strategy),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
+                const SizedBox(height: 24),
+
+                // --- SCORE BUTTON ---
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: strategy.primaryColor.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4))
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: strategy.primaryColor.withOpacity(0.1)),
-                      gradient: LinearGradient(
-                        colors: [strategy.backgroundColor.withOpacity(0.6), strategy.backgroundColor.withOpacity(0.2)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                              child: Icon(strategy.icon, color: strategy.primaryColor, size: 24),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ReliabilityStatsPage(
+                              score: userProfile.reliabilityScore,
+                              strategy: strategy,
+                              userId: user.uid, // Pass USER ID here
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text("Reliability Score", style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Text("$currentScore", style: const TextStyle(color: Colors.black87, fontSize: 20, fontWeight: FontWeight.bold)),
-                                      const Text("/100", style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: LinearProgressIndicator(
-                            value: currentScore / 100,
-                            backgroundColor: Colors.white,
-                            valueColor: AlwaysStoppedAnimation<Color>(strategy.barColor),
-                            minHeight: 8,
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: strategy.primaryColor.withOpacity(0.1)),
+                          gradient: LinearGradient(
+                            colors: [strategy.backgroundColor.withOpacity(0.6), strategy.backgroundColor.withOpacity(0.2)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
                         ),
-                      ],
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                  child: Icon(strategy.icon, color: strategy.primaryColor, size: 24),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text("Reliability Score", style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Text("${userProfile.reliabilityScore}", style: const TextStyle(color: Colors.black87, fontSize: 20, fontWeight: FontWeight.bold)),
+                                          const Text("/100", style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.chevron_right, color: Colors.grey[400]),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: LinearProgressIndicator(
+                                value: userProfile.reliabilityScore / 100,
+                                backgroundColor: Colors.white,
+                                valueColor: AlwaysStoppedAnimation<Color>(strategy.barColor),
+                                minHeight: 8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            // =================================================================
 
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            // --- 3. Contact Info ---
-            _buildSectionContainer(
-              title: "Contact Information",
-              children: [
-                _buildListTile(Icons.email_outlined, "Email", _userProfile.email),
-                const Divider(),
-                _buildListTile(Icons.phone_outlined, "Phone", _userProfile.phone),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // --- 4. Skills ---
-            _buildSectionContainer(
-              title: "My Skills",
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _userProfile.skills.map((s) => _buildSkillChip(s)).toList(),
-                )
-              ],
-            ),
-            const SizedBox(height: 30),
-
-            // Logout Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.red,
-                  elevation: 0,
-                  side: const BorderSide(color: Colors.redAccent),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                _buildSectionContainer(
+                  title: "Contact Information",
+                  children: [
+                    _buildListTile(Icons.email_outlined, "Email", userProfile.email),
+                    const Divider(),
+                    _buildListTile(Icons.phone_outlined, "Phone", userProfile.phone),
+                  ],
                 ),
-                onPressed: () async {
-                  await FirebaseAuth.instance.signOut();
-                  if (context.mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => const LoginPage()),
-                          (route) => false,
-                    );
-                  }
-                },
-                child: const Text("Log Out"),
-              ),
+                const SizedBox(height: 16),
+
+                _buildSectionContainer(
+                  title: "My Skills",
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: userProfile.skills.map((s) => _buildSkillChip(s)).toList(),
+                    )
+                  ],
+                ),
+                const SizedBox(height: 30),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.red,
+                      elevation: 0,
+                      side: const BorderSide(color: Colors.redAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    onPressed: () async {
+                      await FirebaseAuth.instance.signOut();
+                      if (context.mounted) {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (context) => const LoginPage()),
+                              (route) => false,
+                        );
+                      }
+                    },
+                    child: const Text("Log Out"),
+                  ),
+                ),
+                const SizedBox(height: 30),
+              ],
             ),
-            const SizedBox(height: 30),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -411,134 +397,19 @@ class _ParticipantProfilePageState extends State<ParticipantProfilePage> {
 }
 
 // ===========================================================================
-// 4. EDIT PROFILE PAGE (New Page)
-// ===========================================================================
-
-class EditProfilePage extends StatefulWidget {
-  final UserProfile currentProfile;
-
-  const EditProfilePage({super.key, required this.currentProfile});
-
-  @override
-  State<EditProfilePage> createState() => _EditProfilePageState();
-}
-
-class _EditProfilePageState extends State<EditProfilePage> {
-  final _formKey = GlobalKey<FormState>();
-
-  late TextEditingController _nameController;
-  late TextEditingController _locationController;
-  late TextEditingController _emailController;
-  late TextEditingController _phoneController;
-  late TextEditingController _skillsController;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.currentProfile.name);
-    _locationController = TextEditingController(text: widget.currentProfile.location);
-    _emailController = TextEditingController(text: widget.currentProfile.email);
-    _phoneController = TextEditingController(text: widget.currentProfile.phone);
-    _skillsController = TextEditingController(text: widget.currentProfile.skills.join(", "));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Edit Profile", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              if (_formKey.currentState!.validate()) {
-                // Return updated profile object
-                final updatedProfile = UserProfile(
-                  name: _nameController.text,
-                  location: _locationController.text,
-                  email: _emailController.text,
-                  phone: _phoneController.text,
-                  skills: _skillsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
-                );
-                Navigator.pop(context, updatedProfile);
-              }
-            },
-            child: const Text("Save", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          )
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionTitle("Personal Details"),
-              _buildTextField("Full Name", _nameController, Icons.person),
-              _buildTextField("Location", _locationController, Icons.location_on),
-
-              const SizedBox(height: 24),
-              _buildSectionTitle("Contact Info"),
-              _buildTextField("Email", _emailController, Icons.email),
-              _buildTextField("Phone", _phoneController, Icons.phone),
-
-              const SizedBox(height: 24),
-              _buildSectionTitle("Skills"),
-              const Text("Separate skills with commas (e.g. Farming, Driving)", style: TextStyle(fontSize: 12, color: Colors.grey)),
-              const SizedBox(height: 8),
-              _buildTextField("Skills", _skillsController, Icons.school, maxLines: 2),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-    );
-  }
-
-  Widget _buildTextField(String label, TextEditingController controller, IconData icon, {int maxLines = 1}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextFormField(
-        controller: controller,
-        maxLines: maxLines,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, color: Colors.grey),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          filled: true,
-          fillColor: Colors.grey[50],
-        ),
-        validator: (value) => value!.isEmpty ? "Required" : null,
-      ),
-    );
-  }
-}
-
-// ===========================================================================
-// 5. RELIABILITY STATS SCREEN
+// 4. RELIABILITY STATS SCREEN
 // ===========================================================================
 
 class ReliabilityStatsPage extends StatelessWidget {
   final int score;
   final ReliabilityStrategy strategy;
+  final String userId; // Added User ID to fetch history
 
   const ReliabilityStatsPage({
     super.key,
     required this.score,
     required this.strategy,
+    required this.userId,
   });
 
   @override
@@ -558,7 +429,6 @@ class ReliabilityStatsPage extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            // --- 1. BIG SCORE INDICATOR ---
             Center(
               child: Stack(
                 alignment: Alignment.center,
@@ -588,7 +458,6 @@ class ReliabilityStatsPage extends StatelessWidget {
             ),
             const SizedBox(height: 30),
 
-            // --- 2. STATUS CARD ---
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -607,7 +476,7 @@ class ReliabilityStatsPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    "You are consistently meeting project expectations. Keep up the great work!",
+                    "This score reflects your reliability based on leader approvals and job attendance.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.black54, fontSize: 12),
                   ),
@@ -616,33 +485,54 @@ class ReliabilityStatsPage extends StatelessWidget {
             ),
             const SizedBox(height: 30),
 
-            // --- 3. ACTIVITY SUMMARY (Requested) ---
-            const Align(alignment: Alignment.centerLeft, child: Text("Activity Summary", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            // --- REAL-TIME HISTORY SECTION ---
+            const Align(alignment: Alignment.centerLeft, child: Text("History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
             const SizedBox(height: 16),
 
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
-                ],
-              ),
-              child: Column(
-                children: [
-                  _buildPointSummaryRow(Icons.check_circle_outline, "Verified Success", "12 times", "+60 pts", const Color(0xFF43A047)),
-                  const Divider(),
-                  _buildPointSummaryRow(Icons.remove_circle_outline, "Rejection Penalty", "1 time", "-5 pts", const Color(0xFFE57373)),
-                  const Divider(),
-                  _buildPointSummaryRow(Icons.event_busy, "No Show", "0 times", "-0 pts", Colors.grey),
-                ],
-              ),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(userId)
+                  .collection('reliability_history')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                    child: const Center(child: Text("No history available yet.", style: TextStyle(color: Colors.grey))),
+                  );
+                }
+
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                  child: Column(
+                    children: snapshot.data!.docs.map((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return Column(
+                        children: [
+                          _buildHistoryItem(
+                            data['project_title'] ?? 'Unknown Project',
+                            _formatTimestamp(data['timestamp']),
+                            data['change'] as int,
+                            data['reason'] ?? 'Update',
+                          ),
+                          if (doc != snapshot.data!.docs.last) const Divider(),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                );
+              },
             ),
 
             const SizedBox(height: 30),
 
-            // --- 4. HOW SCORING WORKS (Requested) ---
             const Align(alignment: Alignment.centerLeft, child: Text("How Scoring Works", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
             const SizedBox(height: 16),
             Container(
@@ -652,76 +542,63 @@ class ReliabilityStatsPage extends StatelessWidget {
                 children: [
                   _buildScoringRule(
                       Icons.add_circle,
-                      const Color(0xFF43A047), // Green
+                      const Color(0xFF43A047),
                       "Verified Success (+10)",
-                      "Leader approves your uploaded proof and clicks \"Approve & Next\". Work meets quality standards."
+                      "Leader approves your submission."
                   ),
                   const Divider(height: 24),
                   _buildScoringRule(
                       Icons.remove_circle,
-                      const Color(0xFFFFA000), // Amber
+                      const Color(0xFFFFA000),
                       "Rejection Penalty (-5)",
-                      "You uploaded proof but leader clicked \"Reject\" or \"Request Redo\". Work didn't meet standards initially."
+                      "Leader rejects your submission due to quality issues."
                   ),
                   const Divider(height: 24),
                   _buildScoringRule(
                       Icons.cancel,
-                      const Color(0xFFC62828), // Red
+                      const Color(0xFFC62828),
                       "No Show (-20)",
-                      "Leader clicks \"Next Phase\" but you have 0 uploaded proofs. This counts as abandoning the job."
+                      "Failed to submit work or marked as missed."
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 30),
-
-            // --- 5. HISTORY ---
-            const Align(alignment: Alignment.centerLeft, child: Text("History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-              child: Column(
-                children: [
-                  _buildHistoryItem("Community Hall Cleanup", "12 Oct 2025", "+5 pts"),
-                  const Divider(),
-                  _buildHistoryItem("River Bank Planting", "05 Oct 2025", "+8 pts"),
-                  const Divider(),
-                  _buildHistoryItem("School Fence Repair", "28 Sep 2025", "+4 pts"),
-                ],
-              ),
-            ),
-            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  // --- HELPERS ---
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return "Just now";
+    if (timestamp is Timestamp) {
+      DateTime dt = timestamp.toDate();
+      return "${dt.day}/${dt.month}/${dt.year}";
+    }
+    return "";
+  }
 
-  Widget _buildPointSummaryRow(IconData icon, String title, String count, String points, Color color) {
+  Widget _buildHistoryItem(String project, String date, int change, String reason) {
+    Color color = change > 0 ? Colors.green : Colors.red;
+    String sign = change > 0 ? "+" : "";
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                Text(count, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                Text(project, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(reason, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                Text(date, style: const TextStyle(color: Colors.grey, fontSize: 10)),
               ],
             ),
           ),
-          Text(points, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+          Text("$sign$change pts", style: TextStyle(color: color, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -747,25 +624,6 @@ class ReliabilityStatsPage extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildHistoryItem(String project, String date, String points) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(project, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text(date, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-            ],
-          ),
-          Text(points, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-        ],
-      ),
     );
   }
 }

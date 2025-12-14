@@ -18,7 +18,7 @@ class AuthRepository {
     }
   }
 
-  // Sign Up (New Method)
+  // Sign Up
   Future<User?> signUp(String email, String password, String role, String name) async {
     try {
       // 1. Create User in Firebase Auth
@@ -38,8 +38,10 @@ class AuthRepository {
           'role': role, // 'leader' or 'participant'
           'name': name,
           'created_at': FieldValue.serverTimestamp(),
-          'skills': role == 'participant' ? [] : null, // Initialize empty skills for youth
-          'village': 'Kampung Baru', // Default for demo
+          'skills': role == 'participant' ? [] : null,
+          'village': 'Kampung Baru',
+          // --- NEW: Default Reliability Score ---
+          'reliability_score': 100,
         });
       }
       return user;
