@@ -1,5 +1,8 @@
 // lib/models/project_model.dart
 
+part 'milestone_state.dart';
+part 'submission_state.dart';
+
 class Project {
   String? id;
   String title;
@@ -79,6 +82,20 @@ class MilestoneSubmission {
   String? rejectionReason;
   DateTime submittedAt;
 
+  SubmissionState get state {
+    switch (status) {
+      case 'approved':
+        return ApprovedState(this);
+      case 'rejected':
+        return RejectedState(this);
+      case 'missed':
+        return MissedState(this);
+      case 'pending':
+      default:
+        return PendingState(this);
+    }
+  }
+
   MilestoneSubmission({
     required this.userId,
     required this.userName,
@@ -126,6 +143,18 @@ class Milestone {
   List<MilestoneSubmission> submissions; // List of submissions from different youths
   DateTime? submissionDueDate; // Due date for submissions (set by leader)
 
+  MilestoneState get state {
+    switch (status) {
+      case 'open':
+        return OpenState(this);
+      case 'completed':
+        return CompletedState(this);
+      case 'locked':
+      default:
+        return LockedState(this);
+    }
+  }
+
   Milestone({
     required this.phaseName,
     required this.taskName,
@@ -169,43 +198,25 @@ class Milestone {
   };
 
   // Helper properties
-  bool get isOpen => status == 'open';
-  bool get isLocked => status == 'locked';
-  bool get isCompleted => status == 'completed'; // Whole phase marked complete by leader
+  bool get isOpen => state.isOpen;
+  bool get isLocked => state.isLocked;
+  bool get isCompleted => state.isCompleted; // Whole phase marked complete by leader
 
-  bool get hasPendingReviews => submissions.any((s) => s.status == 'pending');
-  bool get hasApprovedSubmissions => submissions.any((s) => s.status == 'approved');
+  bool get hasPendingReviews => state.hasPendingReviews;
+  bool get hasApprovedSubmissions => state.hasApprovedSubmissions;
 
   // Check if milestone can be marked as completed
-  bool get canBeCompleted {
-    if (submissions.isEmpty) return false;
-
-    // Cannot complete if any pending submissions
-    if (submissions.any((s) => s.status == 'pending')) return false;
-
-    // Cannot complete if any rejected submissions (they need re-upload)
-    if (submissions.any((s) => s.status == 'rejected')) return false;
-
-    // Can complete only if all are Approved or Missing
-    return submissions.every((s) => s.status == 'approved' || s.status == 'missed');
-  }
+  bool get canBeCompleted => state.canBeCompleted;
 
   // Check if due date has passed
-  bool get isDueDatePassed {
-    if (submissionDueDate == null) return false;
-    return DateTime.now().isAfter(submissionDueDate!);
-  }
+  bool get isDueDatePassed => state.isDueDatePassed;
 
   // Get count of rejected submissions
-  int get rejectedSubmissionsCount => submissions.where((s) => s.status == 'rejected').length;
+  int get rejectedSubmissionsCount => state.rejectedSubmissionsCount;
 
   // Get count of pending submissions
-  int get pendingSubmissionsCount => submissions.where((s) => s.status == 'pending').length;
+  int get pendingSubmissionsCount => state.pendingSubmissionsCount;
 
   // Helper to calculate total claimed from approved submissions
-  double get totalApprovedExpenses {
-    return submissions
-        .where((s) => s.status == 'approved')
-        .fold(0.0, (sum, s) => sum + (double.tryParse(s.expenseClaimed) ?? 0));
-  }
+  double get totalApprovedExpenses => state.totalApprovedExpenses;
 }
