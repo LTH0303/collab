@@ -39,6 +39,11 @@ class PlannerViewModel extends ChangeNotifier {
     }
   }
 
+  void updateDraft(int index) {
+    // 因为在编辑页面是直接修改引用的 Project 对象，
+    // 所以这里只需要调用 notifyListeners() 来刷新 UI 即可。
+    notifyListeners();
+  }
   // Action: Publish with Constraint (Max 3)
   Future<void> publishDraft(int index) async {
     if (index < 0 || index >= _drafts.length) return;
