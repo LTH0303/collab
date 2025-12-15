@@ -124,6 +124,7 @@ class Milestone {
 
   String status; // 'locked', 'open', 'completed' (Note: 'pending_review' logic now depends on submissions)
   List<MilestoneSubmission> submissions; // List of submissions from different youths
+  DateTime? submissionDueDate; // Due date for submissions (set by leader)
 
   Milestone({
     required this.phaseName,
@@ -134,6 +135,7 @@ class Milestone {
     this.allocatedBudget = '0',
     this.status = 'locked',
     this.submissions = const [],
+    this.submissionDueDate,
   });
 
   factory Milestone.fromJson(Map<String, dynamic> json) {
@@ -148,6 +150,9 @@ class Milestone {
       submissions: (json['submissions'] as List? ?? [])
           .map((s) => MilestoneSubmission.fromJson(s))
           .toList(),
+      submissionDueDate: json['submission_due_date'] != null
+          ? DateTime.parse(json['submission_due_date'])
+          : null,
     );
   }
 
@@ -160,6 +165,7 @@ class Milestone {
     'allocated_budget': allocatedBudget,
     'status': status,
     'submissions': submissions.map((s) => s.toJson()).toList(),
+    'submission_due_date': submissionDueDate?.toIso8601String(),
   };
 
   // Helper properties
@@ -173,8 +179,25 @@ class Milestone {
   // Check if milestone can be marked as completed
   bool get canBeCompleted {
     if (submissions.isEmpty) return false;
-    return submissions.every((s) => s.status != 'pending');
+
+    // Cannot complete if any pending submissions
+    if (submissions.any((s) => s.status == 'pending')) return false;
+
+    // Cannot complete if any rejected submissions (they need re-upload)
+    if (submissions.any((s) => s.status == 'rejected')) return false;
+
+    // Can complete only if all are Approved or Missing
+    return submissions.every((s) => s.status == 'approved' || s.status == 'missed');
   }
+
+  // Check if due date has passed
+  bool get isDueDatePassed {
+    if (submissionDueDate == null) return false;
+    return DateTime.now().isAfter(submissionDueDate!);
+  }
+
+  // Get count of rejected submissions
+  int get rejectedSubmissionsCount => submissions.where((s) => s.status == 'rejected').length;
 
   // Get count of pending submissions
   int get pendingSubmissionsCount => submissions.where((s) => s.status == 'pending').length;

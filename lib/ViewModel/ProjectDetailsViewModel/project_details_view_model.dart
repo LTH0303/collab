@@ -186,4 +186,26 @@ class ProjectDetailsViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> setMilestoneDueDate(String projectId, int milestoneIndex, DateTime dueDate) async {
+    if (_project != null && milestoneIndex < _project!.milestones.length) {
+      _project!.milestones[milestoneIndex].submissionDueDate = dueDate;
+      notifyListeners();
+    }
+    try {
+      await _dbService.setMilestoneDueDate(projectId, milestoneIndex, dueDate);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> checkExpiredSubmissions(String projectId, int milestoneIndex) async {
+    try {
+      await _dbService.checkAndMarkExpiredSubmissions(projectId, milestoneIndex);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
 }

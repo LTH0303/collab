@@ -249,9 +249,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     String message = "Cannot complete milestone: ";
                     if (milestone.submissions.isEmpty) {
                       message += "No submissions received yet.";
-                    } else {
-                      int pendingCount = milestone.pendingSubmissionsCount;
-                      message += "$pendingCount submission(s) still pending review.";
+                    } else if (milestone.pendingSubmissionsCount > 0) {
+                      message += "${milestone.pendingSubmissionsCount} submission(s) still pending review.";
+                    } else if (milestone.rejectedSubmissionsCount > 0) {
+                      message += "${milestone.rejectedSubmissionsCount} submission(s) rejected and need re-upload.";
                     }
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(message), backgroundColor: Colors.orange),
@@ -261,7 +262,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     : null,
                 child: Icon(
                   icon,
-                  color: isEnabled ? iconColor : Colors.grey.shade400,
+                  // Keep completed milestones green even though they are disabled
+                  color: milestone.isCompleted
+                      ? iconColor
+                      : (isEnabled ? iconColor : Colors.grey.shade400),
                   size: 28,
                 ),
               ),
@@ -311,10 +315,51 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             "Incentive: ${milestone.incentive}",
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
+          // Due Date Section
+          if (milestone.isOpen) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.calendar_today, size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    milestone.submissionDueDate != null
+                        ? "Due: ${_formatDate(milestone.submissionDueDate!)} ${milestone.isDueDatePassed ? '(OVERDUE)' : ''}"
+                        : "No due date set",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: milestone.submissionDueDate != null && milestone.isDueDatePassed
+                          ? Colors.red
+                          : Colors.grey.shade600,
+                      fontWeight: milestone.submissionDueDate != null && milestone.isDueDatePassed
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _showSetDueDateDialog(viewModel, project.id!, index, milestone),
+                  icon: const Icon(Icons.edit, size: 14),
+                  label: Text(milestone.submissionDueDate != null ? "Change" : "Set Due Date"),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF2E7D32),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (milestone.isOpen || milestone.isCompleted) ...[
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              onPressed: () => _showSubmissionsDialog(viewModel, project, index, milestone),
+              onPressed: () {
+                // Check expired submissions before showing dialog
+                if (project.id != null && milestone.isOpen) {
+                  viewModel.checkExpiredSubmissions(project.id!, index);
+                }
+                _showSubmissionsDialog(viewModel, project, index, milestone);
+              },
               icon: const Icon(Icons.rate_review, size: 16),
               label: Text(hasPending
                   ? "Review (${milestone.pendingSubmissionsCount} pending)"
@@ -683,4 +728,117 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       ),
     );
   }
+
+  String _formatDate(DateTime date) {
+    return "${date.day}/${date.month}/${date.year}";
+  }
+
+  void _showSetDueDateDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, Milestone milestone) {
+    DateTime initialDate = milestone.submissionDueDate ?? DateTime.now().add(const Duration(days: 7));
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        // Use a StatefulWidget to properly manage state
+        return _DueDatePickerDialog(
+          initialDate: initialDate,
+          onDateSelected: (selectedDate) async {
+            Navigator.pop(ctx);
+            await viewModel.setMilestoneDueDate(projectId, milestoneIndex, selectedDate);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Due date set to ${_formatDate(selectedDate)}"),
+                backgroundColor: Colors.green,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// Separate StatefulWidget for the date picker dialog
+class _DueDatePickerDialog extends StatefulWidget {
+  final DateTime initialDate;
+  final Function(DateTime) onDateSelected;
+
+  const _DueDatePickerDialog({
+    required this.initialDate,
+    required this.onDateSelected,
+  });
+
+  @override
+  State<_DueDatePickerDialog> createState() => _DueDatePickerDialogState();
+}
+
+class _DueDatePickerDialogState extends State<_DueDatePickerDialog> {
+  late DateTime selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedDate = widget.initialDate;
+  }
+
+  String _formatDate(DateTime date) {
+    return "${date.day}/${date.month}/${date.year}";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text("Set Submission Due Date"),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text("Select the due date for all participants to submit their work:"),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: selectedDate,
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) {
+                final TimeOfDay? time = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(selectedDate),
+                );
+                if (time != null) {
+                  setState(() {
+                    selectedDate = DateTime(
+                      picked.year,
+                      picked.month,
+                      picked.day,
+                      time.hour,
+                      time.minute,
+                    );
+                  });
+                }
+              }
+            },
+            child: Text("Select: ${_formatDate(selectedDate)} ${selectedDate.hour.toString().padLeft(2, '0')}:${selectedDate.minute.toString().padLeft(2, '0')}"),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            widget.onDateSelected(selectedDate);
+          },
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
+          child: const Text("Set Due Date"),
+        ),
+      ],
+    );
+  }
+
+
 }
