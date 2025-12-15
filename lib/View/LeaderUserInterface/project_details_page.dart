@@ -481,16 +481,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: isCompleted
-                ? () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Generate Final Impact - Coming Soon")));
-            }
-                : null,
+            onPressed: null, // Disabled for completed projects
             icon: const Icon(Icons.assessment),
             label: const Text("Generate Final Impact"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isCompleted ? const Color(0xFF2E7D32) : Colors.grey.shade300,
-              foregroundColor: isCompleted ? Colors.white : Colors.grey.shade600,
+              backgroundColor: Colors.grey.shade300,
+              foregroundColor: Colors.grey.shade600,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),

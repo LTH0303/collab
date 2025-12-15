@@ -17,6 +17,8 @@ class Project {
   String totalBudget;
   String? leaderId;
   List<String> activeParticipants; // List of User IDs
+  int? initialPopulation; // Population at project start (for impact)
+  int? currentPopulation; // Current population when project completed
 
   Project({
     this.id,
@@ -32,6 +34,8 @@ class Project {
     this.totalBudget = '0',
     this.leaderId,
     this.activeParticipants = const [],
+    this.initialPopulation,
+    this.currentPopulation,
   });
 
   factory Project.fromJson(Map<String, dynamic> json, {String? docId}) {
@@ -48,6 +52,8 @@ class Project {
       totalBudget: json['total_budget']?.toString() ?? '0',
       leaderId: json['leader_id'],
       activeParticipants: List<String>.from(json['active_participants'] ?? []),
+      initialPopulation: json['initial_population'],
+      currentPopulation: json['current_population'],
       milestones: (json['milestones'] as List? ?? [])
           .map((m) => Milestone.fromJson(m))
           .toList(),
@@ -67,6 +73,8 @@ class Project {
       'total_budget': totalBudget,
       'leader_id': leaderId,
       'active_participants': activeParticipants,
+      'initial_population': initialPopulation,
+      'current_population': currentPopulation,
       'milestones': milestones.map((m) => m.toJson()).toList(),
       'created_at': DateTime.now().toIso8601String(),
     };

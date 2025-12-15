@@ -621,6 +621,19 @@ class DatabaseService {
     await _db.collection('projects').doc(projectId).update({'status': 'completed'});
   }
 
+  // --- IMPACT / POPULATION HELPERS ---
+  Future<void> updateProjectPopulation(String projectId, {int? initialPopulation, int? currentPopulation}) async {
+    final Map<String, dynamic> data = {};
+    if (initialPopulation != null) {
+      data['initial_population'] = initialPopulation;
+    }
+    if (currentPopulation != null) {
+      data['current_population'] = currentPopulation;
+    }
+    if (data.isEmpty) return;
+    await _db.collection('projects').doc(projectId).update(data);
+  }
+
   Stream<List<PostModel>> getPostsStream(String currentUserId) {
     return _db.collection('posts')
         .orderBy('timestamp', descending: true)

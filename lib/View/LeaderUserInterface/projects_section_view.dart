@@ -10,6 +10,7 @@ import '../../models/ProjectRepository/application_model.dart';
 import '../../models/DatabaseService/database_service.dart';
 import 'applicant_profile_view.dart';
 import 'project_details_page.dart';
+import 'completed_project_page.dart';
 
 class ProjectsSection extends StatefulWidget {
   const ProjectsSection({super.key});
@@ -20,7 +21,6 @@ class ProjectsSection extends StatefulWidget {
 
 class _ProjectsSectionState extends State<ProjectsSection> {
   int _selectedIndex = 0;
-  final PageController _pageController = PageController(viewportFraction: 0.95);
 
   @override
   Widget build(BuildContext context) {
@@ -98,323 +98,30 @@ class _ProjectsSectionState extends State<ProjectsSection> {
     );
   }
 
-  // UPDATED: Using the PageView layout from DraftView
   Widget _buildDraftsList(PlannerViewModel viewModel) {
-    final drafts = viewModel.drafts;
-
-    if (viewModel.isLoading) return const Center(child: CircularProgressIndicator());
-    if (drafts.isEmpty) {
+    if (viewModel.drafts.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.post_add, size: 64, color: Colors.grey[300]),
-            const SizedBox(height: 16),
-            const Text("Plan your projects before publishing", style: TextStyle(fontSize: 14, color: Colors.grey)),
+          children: const [
+            Icon(Icons.edit_note, size: 60, color: Colors.grey),
+            SizedBox(height: 10),
+            Text("No drafts yet", style: TextStyle(color: Colors.grey)),
           ],
         ),
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const SizedBox(height: 16),
-        const Text("Plan your projects before publishing", style: TextStyle(color: Colors.grey, fontSize: 12)),
-        const SizedBox(height: 16),
-        Expanded(
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: drafts.length,
-            itemBuilder: (context, index) {
-              // Display newest drafts first
-              final draft = drafts[drafts.length - 1 - index];
-              final draftIndex = drafts.length - 1 - index;
-              return _buildDraftPage(context, viewModel, draft, draftIndex);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ADDED: Draft Page Builder
-  Widget _buildDraftPage(BuildContext context, PlannerViewModel viewModel, Project draft, int index) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // --- Main Project Info Card ---
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey.shade300),
-              boxShadow: [
-                BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header Gradient
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF7986CB), Color(0xFF2E7D32)], // Purple to Greenish
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          _tag("Draft", Colors.white.withOpacity(0.2)),
-                          const SizedBox(width: 8),
-                          _tag("AI Generated", Colors.white.withOpacity(0.2)),
-                          const Spacer(),
-                          // EDIT BUTTON ACTION
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.white),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => EditProjectPage(project: draft, projectIndex: index),
-                                ),
-                              );
-                            },
-                          ),
-                          // DELETE BUTTON ACTION (Preserved from old logic)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.white),
-                            onPressed: () => viewModel.removeDraft(index),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        draft.title,
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _sectionTitle("Timeline"),
-                      Text(draft.timeline, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-
-                      const SizedBox(height: 16),
-                      _sectionTitle("Total Budget"), // ADDED: Budget Display
-                      Text("RM ${draft.totalBudget}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
-
-                      const SizedBox(height: 16),
-                      _sectionTitle("Required Skills"),
-                      Wrap(
-                        spacing: 8,
-                        children: draft.skills.map((s) => Chip(
-                          label: Text(s, style: const TextStyle(color: Colors.white, fontSize: 11)),
-                          backgroundColor: const Color(0xFF2E7D32),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        )).toList(),
-                      ),
-
-                      const SizedBox(height: 16),
-                      _sectionTitle("Youth Participants Needed"),
-                      Text(draft.participantRange, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-
-                      const SizedBox(height: 16),
-                      _sectionTitle("Starting Materials"),
-                      Text(
-                        draft.startingResources.join(", "),
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
-                      ),
-
-                      const SizedBox(height: 16),
-                      _sectionTitle("Address"),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          Expanded(child: Text(draft.address, style: const TextStyle(fontSize: 13, color: Colors.black87))),
-                        ],
-                      ),
-
-                      const SizedBox(height: 16),
-                      _sectionTitle("Project Description"),
-                      Text(draft.description, style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // --- Task Milestones (Outside Card) ---
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("Task Milestones", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: draft.milestones.length,
-                  itemBuilder: (context, mIndex) {
-                    final milestone = draft.milestones[mIndex];
-                    final isLast = mIndex == draft.milestones.length - 1;
-                    return _buildTimelineItem(context, milestone, isLast);
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // --- PUBLISH BUTTON ---
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () async {
-                  await viewModel.publishDraft(index);
-                  // Optional: Show success message or navigate
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7D32),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text("Publish to Job Board", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimelineItem(BuildContext context, Milestone milestone, bool isLast) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Timeline Line & Dot
-          Column(
-            children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              if (!isLast)
-                Expanded(
-                  child: Container(
-                    width: 2,
-                    color: Colors.grey.shade400,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 16),
-
-          // Content
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 24.0),
-              child: InkWell(
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: Text(milestone.taskName),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("Phase: ${milestone.phaseName}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          const Text("Description:", style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text(milestone.description),
-                          const SizedBox(height: 10),
-                          const Text("Incentive:", style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text(milestone.incentive, style: const TextStyle(color: Colors.orange)),
-                          const SizedBox(height: 10),
-                          const Text("Allocated Budget:", style: TextStyle(fontWeight: FontWeight.bold)), // Added Budget info in dialog
-                          Text("RM ${milestone.allocatedBudget}", style: const TextStyle(color: Colors.green)),
-                        ],
-                      ),
-                      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close"))],
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEEEEEE),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "${milestone.phaseName}: ${milestone.taskName}",
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        "Incentive: ${milestone.incentive}",
-                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                      ),
-                      Text(
-                        "Budget: RM ${milestone.allocatedBudget}", // Added budget preview
-                        style: TextStyle(fontSize: 12, color: Colors.green[700], fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tag(String text, Color bg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10)),
-    );
-  }
-
-  Widget _sectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4.0),
-      child: Text(title, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: viewModel.drafts.length,
+      itemBuilder: (context, index) {
+        return DraftInlineEditorCard(
+          project: viewModel.drafts[index],
+          onPublish: () => viewModel.publishDraft(index),
+          onDelete: () => viewModel.removeDraft(index),
+        );
+      },
     );
   }
 
@@ -444,7 +151,37 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 
   Widget _buildCompletedProjectsList() {
-    return const Center(child: Text("No completed projects yet.", style: TextStyle(color: Colors.grey)));
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox();
+
+    return StreamBuilder<List<Project>>(
+      stream: DatabaseService().getLeaderProjects(user.uid, 'completed'),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(
+            child: Text(
+              "No completed projects yet.",
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        // Sort most-recent-like (by id descending as a proxy)
+        final projects = [...snapshot.data!]
+          ..sort((a, b) => (b.id ?? '').compareTo(a.id ?? ''));
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(20),
+          itemCount: projects.length,
+          itemBuilder: (context, index) {
+            return CompletedProjectDashboardCard(project: projects[index]);
+          },
+        );
+      },
+    );
   }
 
   Widget _buildActiveCard(BuildContext context, Project project) {
@@ -495,6 +232,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
             ),
           ),
           GestureDetector(
+            // CHANGED: Now navigates directly to ProjectDetailsPage instead of opening the popup
             onTap: () => _navigateToProjectDetails(context, project),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -518,6 +256,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
               ),
             ),
           ),
+          // Action Buttons - Wrap in GestureDetector to stop event propagation
           GestureDetector(
             onTap: () {}, // Empty handler to stop propagation
             child: Padding(
@@ -573,6 +312,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 
   void _navigateToPendingApprovals(BuildContext context, Project project) {
+    // Show applications list as popup modal
     if (project.id != null) {
       _showPendingApplicationsPopup(context, project.id!, project.title);
     }
@@ -767,357 +507,198 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// NEW CLASS: EditProjectPage (Added Budget Field)
-// ---------------------------------------------------------------------------
-class EditProjectPage extends StatefulWidget {
+// ... DraftInlineEditorCard (Same as before)
+class DraftInlineEditorCard extends StatefulWidget {
   final Project project;
-  final int projectIndex;
+  final VoidCallback onPublish;
+  final VoidCallback onDelete;
 
-  const EditProjectPage({super.key, required this.project, required this.projectIndex});
+  const DraftInlineEditorCard({super.key, required this.project, required this.onPublish, required this.onDelete});
 
   @override
-  State<EditProjectPage> createState() => _EditProjectPageState();
+  State<DraftInlineEditorCard> createState() => _DraftInlineEditorCardState();
 }
 
-class _EditProjectPageState extends State<EditProjectPage> {
-  // Controllers
+class _DraftInlineEditorCardState extends State<DraftInlineEditorCard> {
   late TextEditingController _titleController;
-  late TextEditingController _timelineController;
-  late TextEditingController _skillsController;
-  late TextEditingController _participantsController;
-  late TextEditingController _materialsController;
   late TextEditingController _descController;
-  late TextEditingController _addressController;
-  late TextEditingController _budgetController; // Added Budget Controller
-
-  late List<Milestone> _milestones;
+  late TextEditingController _budgetController;
+  final List<Map<String, TextEditingController>> _milestoneControllers = [];
 
   @override
   void initState() {
     super.initState();
-    // Initialize with draft data
     _titleController = TextEditingController(text: widget.project.title);
-    _timelineController = TextEditingController(text: widget.project.timeline);
-    _skillsController = TextEditingController(text: widget.project.skills.join(", "));
-    _participantsController = TextEditingController(text: widget.project.participantRange);
-    _materialsController = TextEditingController(text: widget.project.startingResources.join(", "));
     _descController = TextEditingController(text: widget.project.description);
-    _addressController = TextEditingController(text: widget.project.address);
-    _budgetController = TextEditingController(text: widget.project.totalBudget); // Init Budget
+    _budgetController = TextEditingController(text: widget.project.totalBudget);
 
-    // Deep copy milestones so edits don't reflect immediately until saved
-    _milestones = widget.project.milestones.map((m) => Milestone(
-      phaseName: m.phaseName,
-      taskName: m.taskName,
-      verificationType: m.verificationType,
-      incentive: m.incentive,
-      description: m.description,
-      allocatedBudget: m.allocatedBudget, // Copied allocated budget
-    )).toList();
+    for (var m in widget.project.milestones) {
+      _milestoneControllers.add({
+        'task': TextEditingController(text: m.taskName),
+        'budget': TextEditingController(text: m.allocatedBudget),
+      });
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    _timelineController.dispose();
-    _skillsController.dispose();
-    _participantsController.dispose();
-    _materialsController.dispose();
     _descController.dispose();
-    _addressController.dispose();
     _budgetController.dispose();
+    for (var m in _milestoneControllers) {
+      m['task']!.dispose();
+      m['budget']!.dispose();
+    }
     super.dispose();
   }
 
-  void _saveChanges() {
-    // 1. Update Project Data via ViewModel
-    final updatedSkills = _skillsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-    final updatedMaterials = _materialsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+  void _syncAndPublish() {
+    widget.project.title = _titleController.text;
+    widget.project.description = _descController.text;
+    widget.project.totalBudget = _budgetController.text;
 
-    final plannerVM = Provider.of<PlannerViewModel>(context, listen: false);
+    int loopCount = _milestoneControllers.length;
+    if (widget.project.milestones.length < loopCount) loopCount = widget.project.milestones.length;
 
-    // Direct modification in ViewModel (as per previous logic)
-    final updatedProject = widget.project;
-    updatedProject.title = _titleController.text;
-    updatedProject.timeline = _timelineController.text;
-    updatedProject.skills = updatedSkills;
-    updatedProject.participantRange = _participantsController.text;
-    updatedProject.startingResources = updatedMaterials;
-    updatedProject.description = _descController.text;
-    updatedProject.address = _addressController.text;
-    updatedProject.totalBudget = _budgetController.text; // Save Budget
-    updatedProject.milestones = _milestones;
-
-    // Trigger listener update
-    plannerVM.updateDraft(widget.projectIndex);
-
-    Navigator.pop(context);
-  }
-
-  void _addNewMilestone() {
-    final taskCtrl = TextEditingController();
-    final phaseCtrl = TextEditingController();
-    final incentiveCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    final budgetCtrl = TextEditingController(); // Added budget field for milestone
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Add New Milestone"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: phaseCtrl, decoration: const InputDecoration(labelText: "Phase (e.g. Day 1)")),
-              TextField(controller: taskCtrl, decoration: const InputDecoration(labelText: "Task Name")),
-              TextField(controller: incentiveCtrl, decoration: const InputDecoration(labelText: "Incentive")),
-              TextField(controller: descCtrl, decoration: const InputDecoration(labelText: "Description"), maxLines: 3),
-              TextField(controller: budgetCtrl, decoration: const InputDecoration(labelText: "Allocated Budget (RM)"), keyboardType: TextInputType.number),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (taskCtrl.text.isNotEmpty && phaseCtrl.text.isNotEmpty) {
-                setState(() {
-                  _milestones.add(Milestone(
-                    phaseName: phaseCtrl.text,
-                    taskName: taskCtrl.text,
-                    verificationType: "Photo",
-                    incentive: incentiveCtrl.text,
-                    description: descCtrl.text,
-                    allocatedBudget: budgetCtrl.text.isEmpty ? "0" : budgetCtrl.text, // Set budget
-                  ));
-                });
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
-            child: const Text("Add", style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _editMilestone(int index) {
-    final m = _milestones[index];
-    final taskCtrl = TextEditingController(text: m.taskName);
-    final phaseCtrl = TextEditingController(text: m.phaseName);
-    final incentiveCtrl = TextEditingController(text: m.incentive);
-    final descCtrl = TextEditingController(text: m.description);
-    final budgetCtrl = TextEditingController(text: m.allocatedBudget);
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Edit Milestone"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: phaseCtrl, decoration: const InputDecoration(labelText: "Phase (e.g. Day 1)")),
-              TextField(controller: taskCtrl, decoration: const InputDecoration(labelText: "Task Name")),
-              TextField(controller: incentiveCtrl, decoration: const InputDecoration(labelText: "Incentive")),
-              TextField(controller: descCtrl, decoration: const InputDecoration(labelText: "Description"), maxLines: 3),
-              TextField(controller: budgetCtrl, decoration: const InputDecoration(labelText: "Allocated Budget (RM)"), keyboardType: TextInputType.number),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _milestones[index] = Milestone(
-                  phaseName: phaseCtrl.text,
-                  taskName: taskCtrl.text,
-                  verificationType: m.verificationType,
-                  incentive: incentiveCtrl.text,
-                  description: descCtrl.text,
-                  allocatedBudget: budgetCtrl.text.isEmpty ? "0" : budgetCtrl.text, // Save budget
-                );
-              });
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
-            child: const Text("Save", style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+    for (int i = 0; i < loopCount; i++) {
+      widget.project.milestones[i].taskName = _milestoneControllers[i]['task']!.text;
+      widget.project.milestones[i].allocatedBudget = _milestoneControllers[i]['budget']!.text;
+    }
+    widget.onPublish();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Edit Project", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.grey),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.check, color: Color(0xFF2E7D32)),
-            onPressed: _saveChanges,
-          )
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildLabel("Project Title *"),
-            _buildTextField(_titleController, "e.g. Community Organic Farming"),
-
-            const SizedBox(height: 16),
-            _buildLabel("Total Budget (RM) *"), // ADDED: Budget Input
-            _buildTextField(_budgetController, "e.g. 5000", maxLines: 1),
-
-            const SizedBox(height: 16),
-            _buildLabel("Timeline"),
-            _buildTextField(_timelineController, "e.g. 3-4 months"),
-
-            const SizedBox(height: 16),
-            _buildLabel("Required Skills (Comma-separated)"),
-            _buildTextField(_skillsController, "e.g. Agriculture, Manual Labor"),
-
-            const SizedBox(height: 16),
-            _buildLabel("Youth Participants"),
-            _buildTextField(_participantsController, "e.g. 5-8 participants"),
-
-            const SizedBox(height: 16),
-            _buildLabel("Starting Materials (Comma-separated)"),
-            _buildTextField(_materialsController, "e.g. 2 plots of land, 10 pack seeds"),
-
-            const SizedBox(height: 16),
-            _buildLabel("Address"),
-            _buildTextField(_addressController, "e.g. Kampung Baru, Lot 123"),
-
-            const SizedBox(height: 16),
-            _buildLabel("Project Description *"),
-            _buildTextField(_descController, "Describe the project goals...", maxLines: 5),
-
-            const SizedBox(height: 24),
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Milestones", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                TextButton.icon(
-                  onPressed: _addNewMilestone,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text("Add"),
-                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF2E7D32)),
-                )
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
+                      child: const Text("Draft", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text("Edit Details & Milestones", style: TextStyle(color: Colors.white70, fontSize: 11)),
+                  ],
+                ),
+                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.white), onPressed: widget.onDelete)
               ],
             ),
-            const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _milestones.length,
-                separatorBuilder: (ctx, i) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final m = _milestones[index];
-                  return ListTile(
-                    title: Text("${m.phaseName}: ${m.taskName}", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: Text("${m.incentive} • RM ${m.allocatedBudget}", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close, color: Colors.red),
-                      onPressed: () {
-                        setState(() {
-                          _milestones.removeAt(index);
-                        });
-                      },
-                    ),
-                    onTap: () => _editMilestone(index),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 30),
-            Row(
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
+                const Text("PROJECT TITLE", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                TextField(
+                  controller: _titleController,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: "Enter Title"),
+                ),
+                const Divider(),
+                const Text("DESCRIPTION", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                TextField(
+                  controller: _descController,
+                  maxLines: 3,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: "Enter Description"),
+                ),
+                const SizedBox(height: 12),
+                const Text("TOTAL BUDGET (RM)", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                TextField(
+                  controller: _budgetController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                  decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.flag, size: 16, color: Colors.black54),
+                      SizedBox(width: 8),
+                      Text("MILESTONES (Task & Allocation)", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (_milestoneControllers.isEmpty)
+                  const Text("No milestones generated.", style: TextStyle(color: Colors.grey)),
+                ...List.generate(_milestoneControllers.length, (i) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade100))),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 24, height: 24, alignment: Alignment.center,
+                          decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), shape: BoxShape.circle),
+                          child: Text("${i+1}", style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 3,
+                          child: TextField(
+                            controller: _milestoneControllers[i]['task'],
+                            decoration: const InputDecoration(border: InputBorder.none, isDense: true, hintText: "Task Name"),
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 1,
+                          child: TextField(
+                            controller: _milestoneControllers[i]['budget'],
+                            textAlign: TextAlign.end,
+                            decoration: const InputDecoration(border: InputBorder.none, isDense: true, prefixText: "RM ", prefixStyle: TextStyle(fontSize: 12, color: Colors.grey)),
+                            style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
                   child: ElevatedButton(
-                    onPressed: _saveChanges,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2E7D32),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text("Save Changes", style: TextStyle(color: Colors.white, fontSize: 16)),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      side: const BorderSide(color: Colors.black),
-                    ),
-                    child: const Text("Cancel", style: TextStyle(color: Colors.black, fontSize: 16)),
+                    onPressed: _syncAndPublish,
+                    child: const Text("Publish to Job Board", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLabel(String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0, left: 2),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-    );
-  }
-
-  Widget _buildTextField(TextEditingController controller, String hint, {int maxLines = 1}) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF2E7D32), width: 1.5),
-        ),
+          ),
+        ],
       ),
     );
   }
