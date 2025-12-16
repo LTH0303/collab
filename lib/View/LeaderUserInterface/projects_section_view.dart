@@ -9,6 +9,7 @@ import '../../models/ProjectRepository/project_model.dart';
 import '../../models/ProjectRepository/application_model.dart';
 import '../../models/DatabaseService/database_service.dart';
 import 'applicant_profile_view.dart';
+import 'completed_project_page.dart';
 import 'project_details_page.dart';
 
 class ProjectsSection extends StatefulWidget {
@@ -444,7 +445,40 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   }
 
   Widget _buildCompletedProjectsList() {
-    return const Center(child: Text("No completed projects yet.", style: TextStyle(color: Colors.grey)));
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox();
+
+    return StreamBuilder<List<Project>>(
+      stream: DatabaseService().getLeaderProjects(user.uid, 'completed'),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final projects = snapshot.data ?? [];
+        if (projects.isEmpty) {
+          return const Center(
+            child: Text("No completed projects yet.", style: TextStyle(color: Colors.grey)),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(20),
+          itemCount: projects.length,
+          itemBuilder: (context, index) {
+            final project = projects[index];
+            return GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CompletedProjectDashboardPage(project: project),
+                ),
+              ),
+              child: CompletedProjectDashboardCard(project: project),
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildActiveCard(BuildContext context, Project project) {
