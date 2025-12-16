@@ -19,6 +19,7 @@ class Project {
   List<String> activeParticipants; // List of User IDs
   int? initialPopulation; // Population at project start (for impact)
   int? currentPopulation; // Current population when project completed
+  DateTime? completedAt; // When project was marked completed
 
   Project({
     this.id,
@@ -36,6 +37,7 @@ class Project {
     this.activeParticipants = const [],
     this.initialPopulation,
     this.currentPopulation,
+    this.completedAt,
   });
 
   factory Project.fromJson(Map<String, dynamic> json, {String? docId}) {
@@ -54,6 +56,9 @@ class Project {
       activeParticipants: List<String>.from(json['active_participants'] ?? []),
       initialPopulation: json['initial_population'],
       currentPopulation: json['current_population'],
+      completedAt: json['completed_at'] != null
+          ? DateTime.tryParse(json['completed_at'])
+          : null,
       milestones: (json['milestones'] as List? ?? [])
           .map((m) => Milestone.fromJson(m))
           .toList(),
@@ -75,6 +80,7 @@ class Project {
       'active_participants': activeParticipants,
       'initial_population': initialPopulation,
       'current_population': currentPopulation,
+      if (completedAt != null) 'completed_at': completedAt!.toIso8601String(),
       'milestones': milestones.map((m) => m.toJson()).toList(),
       'created_at': DateTime.now().toIso8601String(),
     };

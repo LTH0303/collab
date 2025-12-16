@@ -4,6 +4,7 @@ import '../../ViewModel/PlannerViewModel/planner_view_model.dart';
 import 'leader_profile_page.dart';
 import 'projects_section_view.dart';
 import '../CommunityInterface/community_hub_page.dart'; // Import the new community page
+import 'impact_overview_page.dart';
 
 class LeaderMainLayout extends StatefulWidget {
   const LeaderMainLayout({super.key});
@@ -77,7 +78,7 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
         children: [
           AIPlannerSection(onGenerateSuccess: switchToProjectsTab),
           const ProjectsSection(),
-          const Center(child: Text("Impact Dashboard Coming Soon")),
+          const ImpactOverviewPage(),
           const CommunityHubPage(), // <--- Added here
         ],
       ),

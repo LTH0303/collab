@@ -224,6 +224,7 @@ class DatabaseService {
       };
       if (allCompleted) {
         updateData['status'] = 'completed';
+        updateData['completed_at'] = DateTime.now().toIso8601String();
       }
 
       await projectRef.update(updateData);
@@ -618,7 +619,21 @@ class DatabaseService {
   }
 
   Future<void> finalizeProject(String projectId) async {
-    await _db.collection('projects').doc(projectId).update({'status': 'completed'});
+    await _db.collection('projects').doc(projectId).update({
+      'status': 'completed',
+      'completed_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  // Stream all projects for a leader (any status)
+  Stream<List<Project>> streamLeaderAllProjects(String leaderId) {
+    return _db
+        .collection('projects')
+        .where('leader_id', isEqualTo: leaderId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) => Project.fromJson(doc.data(), docId: doc.id))
+        .toList());
   }
 
   // --- IMPACT / POPULATION HELPERS ---
