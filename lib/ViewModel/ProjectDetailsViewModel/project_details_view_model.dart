@@ -78,7 +78,7 @@ class ProjectDetailsViewModel extends ChangeNotifier {
     if (totalExpected == 0) return 0.0;
     int totalSubmissions = 0;
     for (int i = 0; i < milestonesToCount && i < _project!.milestones.length; i++) {
-      totalSubmissions += _project!.milestones[i].submissions.where((s) => s.status != 'pending').length;
+      totalSubmissions += _project!.milestones[i].submissions.where((s) => s.status == 'approved').length;
     }
     return (totalSubmissions / totalExpected) * 100;
   }

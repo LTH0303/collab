@@ -97,10 +97,22 @@ class ImpactOverviewViewModel extends ChangeNotifier {
         completedAt.isBefore(_startOfNextMonth);
   });
 
+  Iterable<Project> get _createdThisMonth => _projects.where((p) {
+    final createdAt = p.createdAt;
+    if (createdAt == null) return false;
+    return !createdAt.isBefore(_startOfMonth) &&
+        createdAt.isBefore(_startOfNextMonth);
+  });
+
   double get projectCompletionRateThisMonth {
-    if (_projects.isEmpty) return 0;
+    final createdThisMonthCount = _createdThisMonth.length;
+    if (createdThisMonthCount == 0) return 0;
     final completedThisMonthCount = _completedThisMonth.length;
-    return (completedThisMonthCount / _projects.length) * 100;
+
+    debugPrint('Total projects: ${_createdThisMonth.length}');
+    debugPrint('Completed projects this month: ${_completedThisMonth.length}');
+
+    return (completedThisMonthCount / createdThisMonthCount) * 100;
   }
 
   double get youthParticipationThisMonthPercent {
@@ -108,28 +120,27 @@ class ImpactOverviewViewModel extends ChangeNotifier {
     if (completedThisMonthProjects.isEmpty) return 0;
 
     double totalKPI = 0;
-    int projectCount = completedThisMonthProjects.length;
 
     for (final p in completedThisMonthProjects) {
-      // Count unique participants who submitted at least once across milestones
-      final uniqueApprovedParticipants = <String>{};
+      int approvedCount = 0;
+      int expectedCount = 0;
+
       for (final m in p.milestones) {
-        uniqueApprovedParticipants.addAll(
-          m.submissions
-              .where((s) => s.status == 'approved')
-              .map((s) => s.userId),
-        );
+        approvedCount += m.submissions
+            .where((s) => s.status == 'approved')
+            .length;
+
+        expectedCount += p.activeParticipants.length; // assume each participant expected once per milestone
       }
 
-      final projectKPI = p.activeParticipants.isNotEmpty
-          ? (uniqueApprovedParticipants.length / p.activeParticipants.length) * 100
+      final projectKPI = expectedCount > 0
+          ? (approvedCount / expectedCount) * 100
           : 0;
 
       totalKPI += projectKPI;
     }
 
-    // Average across all projects completed this month
-    return totalKPI / projectCount;
+    return totalKPI / completedThisMonthProjects.length;
   }
 
 
@@ -139,11 +150,15 @@ class ImpactOverviewViewModel extends ChangeNotifier {
     int totalGrowth = 0;
     for (final p in _completedThisMonth) {
       if (p.initialPopulation != null && p.currentPopulation != null) {
-        totalGrowth += (p.currentPopulation! - p.initialPopulation!);
+        int growth = p.currentPopulation! - p.initialPopulation!;
+        debugPrint('Project: ${p.title}, Growth: $growth');
+        totalGrowth += growth;
       }
     }
+    debugPrint('Total community growth this month: $totalGrowth');
     return totalGrowth;
   }
+
 
   // Hard-coded last month growth baseline (for now)
   int get communityGrowthLastMonthBaseline => 50;

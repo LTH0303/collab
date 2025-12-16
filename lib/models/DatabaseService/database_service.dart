@@ -122,13 +122,13 @@ class DatabaseService {
 
   Future<void> addProject(Project project, String leaderId) async {
     project.status = 'active';
+    project.createdAt = DateTime.now(); // Set createdAt on project object
     for (var m in project.milestones) {
       m.status = 'locked';
     }
     await _db.collection('projects').add({
       ...project.toJson(),
       'leader_id': leaderId,
-      'created_at': DateTime.now().toIso8601String(),
       'active_participants': [],
     });
   }
