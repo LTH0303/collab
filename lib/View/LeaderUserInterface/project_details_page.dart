@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../ViewModel/ProjectDetailsViewModel/project_details_view_model.dart';
 import '../../models/ProjectRepository/project_model.dart';
 import 'hired_youth_list_view.dart'; // Import HiredYouthListView
+import 'completed_project_page.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
   final Project project;
@@ -76,7 +77,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           }
 
           final project = viewModel.project ?? widget.project;
-          return _buildProjectContent(context, viewModel, project);
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: _buildProjectContent(context, viewModel, project),
+            ),
+          );
         },
       ),
     );
@@ -439,10 +445,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   }
 
   Widget _buildProjectActions(ProjectDetailsViewModel viewModel, Project project) {
-    bool isCompleted = viewModel.isProjectCompleted;
-    bool isStillActive = project.status == 'active';
-
-    bool showForceClose = isCompleted && isStillActive;
+    final bool allMilestonesDone = viewModel.isProjectCompleted;
+    final bool isStatusCompleted = project.status == 'completed';
+    final bool showForceClose = allMilestonesDone && !isStatusCompleted;
+    final bool canGenerateImpact = allMilestonesDone && !isStatusCompleted;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -481,12 +487,28 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: null, // Disabled for completed projects
+            onPressed: canGenerateImpact
+                ? () async {
+              if (project.id == null) return;
+              // Mark project completed, then navigate to the completed dashboard
+              await viewModel.finalizeProject(project.id!);
+              final nextProject = viewModel.project ?? project;
+
+              if (mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CompletedProjectDashboardPage(project: nextProject),
+                  ),
+                );
+              }
+            }
+                : null,
             icon: const Icon(Icons.assessment),
             label: const Text("Generate Final Impact"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey.shade300,
-              foregroundColor: Colors.grey.shade600,
+              backgroundColor: canGenerateImpact ? const Color(0xFF2E7D32) : Colors.grey.shade300,
+              foregroundColor: canGenerateImpact ? Colors.white : Colors.grey.shade600,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),
@@ -495,7 +517,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: isCompleted
+            onPressed: (allMilestonesDone && isStatusCompleted)
                 ? () {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Recommend Next Project - Coming Soon")));
             }
@@ -503,8 +525,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             icon: const Icon(Icons.lightbulb_outline),
             label: const Text("Recommend Next Project"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isCompleted ? const Color(0xFF2E7D32) : Colors.grey.shade300,
-              foregroundColor: isCompleted ? Colors.white : Colors.grey.shade600,
+              backgroundColor: (allMilestonesDone && isStatusCompleted) ? const Color(0xFF2E7D32) : Colors.grey.shade300,
+              foregroundColor: (allMilestonesDone && isStatusCompleted) ? Colors.white : Colors.grey.shade600,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),

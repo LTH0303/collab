@@ -454,7 +454,12 @@ class _ProjectsSectionState extends State<ProjectsSection> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final projects = snapshot.data ?? [];
+        final projects = List<Project>.from(snapshot.data ?? []);
+        projects.sort((a, b) {
+          final aDate = a.completedAt ?? a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bDate = b.completedAt ?? b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bDate.compareTo(aDate);
+        });
         if (projects.isEmpty) {
           return const Center(
             child: Text("No completed projects yet.", style: TextStyle(color: Colors.grey)),
