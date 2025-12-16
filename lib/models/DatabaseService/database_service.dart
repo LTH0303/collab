@@ -282,6 +282,11 @@ class DatabaseService {
     final snapshot = await projectRef.get();
     if (!snapshot.exists) throw Exception("Project not found");
 
+    // --- NEW: FETCH ACTUAL NAME FROM FIRESTORE TO PREVENT EMPTY STRINGS ---
+    final userDoc = await _db.collection('users').doc(userId).get();
+    final actualName = userDoc.data()?['name'] ?? "Unknown Participant";
+    // --------------------------------------------------------------------
+
     Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
     List<dynamic> rawMilestones = data['milestones'] ?? [];
     List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
@@ -289,13 +294,11 @@ class DatabaseService {
     if (milestoneIndex < milestones.length) {
       var milestone = milestones[milestoneIndex];
 
-      // CRITICAL: Ensure only ONE submission per user per milestone
-      // Find ANY existing submission for this user (rejected, missed, pending, or approved)
       int existingIndex = milestone.submissions.indexWhere((s) => s.userId == userId);
 
       final submission = MilestoneSubmission(
         userId: userId,
-        userName: userName,
+        userName: actualName, // <--- USE THE FETCHED ACTUAL NAME
         expenseClaimed: expense,
         proofImageUrl: photoUrl ?? '',
         status: 'pending',
@@ -303,14 +306,8 @@ class DatabaseService {
       );
 
       if (existingIndex != -1) {
-        // Replace existing submission (whether rejected, missed, or duplicate pending)
-        // This handles:
-        // - Rejected → Re-upload (replace with new pending)
-        // - Missed → Late submission (replace missed with new pending)
-        // - Duplicate pending → Replace with latest
         milestone.submissions[existingIndex] = submission;
       } else {
-        // New submission (user has no existing submission)
         milestone.submissions.add(submission);
       }
 
