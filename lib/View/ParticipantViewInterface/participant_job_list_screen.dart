@@ -286,6 +286,14 @@ class JobCard extends StatelessWidget {
                         bool success = await appViewModel.applyForJob(project);
                         if (success) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Application Sent!")));
+                        } else if (appViewModel.error != null) {
+                          // --- FIX: Show Error Message if Application Failed ---
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(appViewModel.error!),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
                         }
                       } : null,
                       style: ElevatedButton.styleFrom(
