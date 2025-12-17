@@ -1,10 +1,12 @@
 // lib/View/LeaderUserInterface/project_details_page.dart
 
+import 'dart:convert'; // Added for Base64 Decoding
+import 'dart:typed_data'; // Added for Uint8List
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../ViewModel/ProjectDetailsViewModel/project_details_view_model.dart';
 import '../../models/ProjectRepository/project_model.dart';
-import 'hired_youth_list_view.dart'; // Import HiredYouthListView
+import 'hired_youth_list_view.dart';
 import 'completed_project_page.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
@@ -45,7 +47,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           widget.project.title,
           style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
-        // --- ADDED: Hired Team Button ---
         actions: [
           IconButton(
             icon: const Icon(Icons.people_alt_outlined, color: Colors.black),
@@ -268,7 +269,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     : null,
                 child: Icon(
                   icon,
-                  // Keep completed milestones green even though they are disabled
                   color: milestone.isCompleted
                       ? iconColor
                       : (isEnabled ? iconColor : Colors.grey.shade400),
@@ -360,7 +360,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             const SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: () {
-                // Check expired submissions before showing dialog
                 if (project.id != null && milestone.isOpen) {
                   viewModel.checkExpiredSubmissions(project.id!, index);
                 }
@@ -490,7 +489,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             onPressed: canGenerateImpact
                 ? () async {
               if (project.id == null) return;
-              // Mark project completed, then navigate to the completed dashboard
               await viewModel.finalizeProject(project.id!);
               final nextProject = viewModel.project ?? project;
 
@@ -619,6 +617,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         statusIcon = Icons.help_outline;
     }
 
+    final bool hasImage = submission.proofImageUrl.isNotEmpty &&
+        submission.proofImageUrl != "https://mock.url/photo.jpg" &&
+        submission.proofImageUrl != "https://via.placeholder.com/150";
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -653,12 +655,36 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            height: 120,
-            width: double.infinity,
-            decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-            child: const Center(child: Text("Photo Proof Placeholder", style: TextStyle(color: Colors.grey))),
+
+          // --- CHANGED: IMAGE DISPLAY LOGIC TO SUPPORT BASE64 ---
+          GestureDetector(
+            onTap: hasImage ? () => _showFullImage(context, submission.proofImageUrl) : null,
+            child: Container(
+              height: 180,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: hasImage
+                  ? ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: _buildImageWidget(submission.proofImageUrl),
+              )
+                  : const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.image_not_supported, color: Colors.grey),
+                    Text("No Photo Uploaded", style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ),
           ),
+          // ----------------------------------------------------
+
           if (submission.rejectionReason != null)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
@@ -687,6 +713,56 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       ),
     );
   }
+
+  // --- NEW HELPER: DECIDE WHETHER TO USE NETWORK OR MEMORY (BASE64) ---
+  Widget _buildImageWidget(String imageString) {
+    if (imageString.startsWith('http')) {
+      return Image.network(
+        imageString,
+        fit: BoxFit.cover,
+        errorBuilder: (ctx, _, __) => const Center(child: Icon(Icons.broken_image)),
+      );
+    } else {
+      try {
+        Uint8List decodedBytes = base64Decode(imageString);
+        return Image.memory(
+          decodedBytes,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, _, __) => const Center(child: Icon(Icons.broken_image)),
+        );
+      } catch (e) {
+        return const Center(child: Text("Invalid Image Data"));
+      }
+    }
+  }
+
+  void _showFullImage(BuildContext context, String imageString) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              children: [
+                // Re-use helper for full screen logic
+                _buildImageWidget(imageString),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                )
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+// ... rest of the file (approve/reject dialogs) remains same ...
 
   void _showApproveDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final commentController = TextEditingController();
@@ -757,7 +833,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     showDialog(
       context: context,
       builder: (ctx) {
-        // Use a StatefulWidget to properly manage state
         return _DueDatePickerDialog(
           initialDate: initialDate,
           onDateSelected: (selectedDate) async {
@@ -776,7 +851,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   }
 }
 
-// Separate StatefulWidget for the date picker dialog
 class _DueDatePickerDialog extends StatefulWidget {
   final DateTime initialDate;
   final Function(DateTime) onDateSelected;
@@ -857,6 +931,4 @@ class _DueDatePickerDialogState extends State<_DueDatePickerDialog> {
       ],
     );
   }
-
-
 }
