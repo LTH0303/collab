@@ -264,7 +264,8 @@ class JobCard extends StatelessWidget {
                 children: [
                   _buildInfoPill(Icons.access_time, "Duration", project.timeline),
                   const SizedBox(width: 16),
-                  _buildInfoPill(Icons.attach_money, "Pay", "RM ${project.totalBudget}"),
+                  // CHANGED: Label from "Pay" to "Value" to represent Total Project Investment
+                  _buildInfoPill(Icons.attach_money, "Value", "RM ${project.totalBudget}"),
                 ],
               ),
               const SizedBox(height: 20),
