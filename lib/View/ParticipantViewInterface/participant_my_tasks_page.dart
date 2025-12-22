@@ -5,11 +5,66 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firestore access
 import '../../models/DatabaseService/database_service.dart';
 import '../../models/ProjectRepository/project_model.dart';
 
+// --- RELIABILITY STRATEGY CLASSES (Copied for local use) ---
+abstract class ReliabilityStrategy {
+  String get label;
+  Color get primaryColor;
+  Color get backgroundColor;
+  Color get barColor;
+  IconData get icon;
+}
+
+class HighReliabilityStrategy implements ReliabilityStrategy {
+  @override
+  String get label => "High Reliability";
+  @override
+  Color get primaryColor => const Color(0xFF2E7D32);
+  @override
+  Color get backgroundColor => const Color(0xFFE8F5E9);
+  @override
+  Color get barColor => const Color(0xFF43A047);
+  @override
+  IconData get icon => Icons.verified_user;
+}
+
+class MediumReliabilityStrategy implements ReliabilityStrategy {
+  @override
+  String get label => "Medium Reliability";
+  @override
+  Color get primaryColor => const Color(0xFFFFA000);
+  @override
+  Color get backgroundColor => const Color(0xFFFFF8E1);
+  @override
+  Color get barColor => const Color(0xFFFFC107);
+  @override
+  IconData get icon => Icons.star_half;
+}
+
+class LowReliabilityStrategy implements ReliabilityStrategy {
+  @override
+  String get label => "Needs Improvement";
+  @override
+  Color get primaryColor => const Color(0xFFC62828);
+  @override
+  Color get backgroundColor => const Color(0xFFFFEBEE);
+  @override
+  Color get barColor => const Color(0xFFE57373);
+  @override
+  IconData get icon => Icons.warning_amber_rounded;
+}
+
 class ParticipantMyTasksPage extends StatelessWidget {
   const ParticipantMyTasksPage({super.key});
+
+  ReliabilityStrategy _getReliabilityStrategy(int score) {
+    if (score >= 80) return HighReliabilityStrategy();
+    if (score >= 50) return MediumReliabilityStrategy();
+    return LowReliabilityStrategy();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,35 +83,64 @@ class ParticipantMyTasksPage extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 24),
         child: Column(
           children: [
-            // --- Reliability Score Banner ---
-            Container(
-              margin: const EdgeInsets.all(20),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.star, color: Colors.orange, size: 32),
-                  ),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text("Reliability Score", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text("High (Top 15%)", style: TextStyle(color: Colors.orange[700], fontWeight: FontWeight.bold)),
-                      const Text("Keep up the great work!", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            // --- Reliability Score Banner (REAL-TIME) ---
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+              builder: (context, snapshot) {
+                // Default values if loading or error
+                int score = 100;
+
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  final data = snapshot.data!.data() as Map<String, dynamic>;
+                  score = data['reliability_score'] ?? 100;
+                }
+
+                final strategy = _getReliabilityStrategy(score);
+
+                return Container(
+                  margin: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))
                     ],
-                  )
-                ],
-              ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                            color: strategy.backgroundColor,
+                            borderRadius: BorderRadius.circular(12)
+                        ),
+                        child: Icon(strategy.icon, color: strategy.primaryColor, size: 32),
+                      ),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Reliability Score", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Row(
+                            children: [
+                              Text(
+                                  "$score/100",
+                                  style: TextStyle(color: strategy.primaryColor, fontWeight: FontWeight.bold, fontSize: 14)
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                  strategy.label,
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 12)
+                              ),
+                            ],
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                );
+              },
             ),
 
             // --- Active Projects Stream ---
@@ -398,7 +482,6 @@ class SubmissionDetailsDialog extends StatelessWidget {
   Widget _buildImage(String imageString) {
     if (imageString.isEmpty) return const SizedBox.shrink();
 
-    // FIX: Remove 'width: double.infinity' which causes RenderIntrinsicWidth issues in AlertDialog
     if (imageString.startsWith('http')) {
       return Image.network(imageString, height: 200, fit: BoxFit.cover);
     } else {
@@ -426,12 +509,12 @@ class SubmissionDetailsDialog extends StatelessWidget {
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch, // Changed from start to stretch
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(milestone.taskName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 16),
 
-            Align( // Wrap in Align because 'stretch' stretches text too
+            Align(
               alignment: Alignment.centerLeft,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -557,7 +640,7 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch, // Stretch to avoid width issues
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (isResubmission) ...[
               Container(
@@ -625,7 +708,6 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
               },
               child: Container(
                 height: 140,
-                // Removed width: double.infinity
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
                   border: Border.all(color: Colors.grey.shade300),

@@ -12,8 +12,16 @@ import '../../models/ProjectRepository/application_state.dart';
 import '../../models/DatabaseService/database_service.dart';
 import 'participant_profile_page.dart';
 
-class ParticipantJobBoard extends StatelessWidget {
+class ParticipantJobBoard extends StatefulWidget {
   const ParticipantJobBoard({super.key});
+
+  @override
+  State<ParticipantJobBoard> createState() => _ParticipantJobBoardState();
+}
+
+class _ParticipantJobBoardState extends State<ParticipantJobBoard> {
+  // 0: All Jobs, 1: Saved Jobs
+  int _selectedViewIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +32,7 @@ class ParticipantJobBoard extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F9FC),
-      // Use StreamBuilder to listen to Profile Changes (Name/Skills)
+      // Use StreamBuilder to listen to Profile Changes (Name/Skills/Saved Jobs)
       body: StreamBuilder<Map<String, dynamic>?>(
         stream: DatabaseService().streamUserProfile(user.uid),
         builder: (context, profileSnapshot) {
@@ -37,6 +45,7 @@ class ParticipantJobBoard extends StatelessWidget {
           final userName = userData['name'] ?? 'Participant';
           final userSkills = List<String>.from(userData['skills'] ?? []);
           final reliabilityScore = userData['reliability_score'] ?? 100;
+          final savedProjects = List<String>.from(userData['saved_projects'] ?? []);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -86,10 +95,17 @@ class ParticipantJobBoard extends StatelessWidget {
 
                 const SizedBox(height: 30),
 
-                // --- 3. Projects List with Match Logic ---
-                const Text("Available Projects", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                // --- 3. View Switcher (All Jobs / Saved) ---
+                Row(
+                  children: [
+                    _buildTabButton("All Jobs", 0),
+                    const SizedBox(width: 12),
+                    _buildTabButton("Saved", 1),
+                  ],
+                ),
                 const SizedBox(height: 16),
 
+                // --- 4. Projects List with Match Logic ---
                 StreamBuilder<List<Project>>(
                   stream: jobViewModel.activeProjectsStream,
                   builder: (context, snapshot) {
@@ -97,14 +113,39 @@ class ParticipantJobBoard extends StatelessWidget {
                       return const Center(child: Padding(padding: EdgeInsets.only(top: 40), child: Text("No jobs available yet.")));
                     }
 
+                    // Filter Logic based on selected Tab
+                    List<Project> displayProjects = snapshot.data!;
+                    if (_selectedViewIndex == 1) {
+                      displayProjects = displayProjects.where((p) => savedProjects.contains(p.id)).toList();
+                    }
+
+                    if (displayProjects.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 40),
+                          child: Text(
+                            _selectedViewIndex == 1 ? "No saved jobs yet." : "No jobs matching criteria.",
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      );
+                    }
+
                     return ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: snapshot.data!.length,
+                      itemCount: displayProjects.length,
                       itemBuilder: (context, index) {
+                        final project = displayProjects[index];
+                        final isSaved = savedProjects.contains(project.id);
+
                         return JobCard(
-                          project: snapshot.data![index],
+                          project: project,
                           userSkills: userSkills, // Pass skills for matching
+                          isSaved: isSaved, // Pass saved status
+                          onToggleSave: () {
+                            jobViewModel.toggleSavedJob(project.id!, isSaved);
+                          },
                         );
                       },
                     );
@@ -114,6 +155,33 @@ class ParticipantJobBoard extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildTabButton(String label, int index) {
+    bool isSelected = _selectedViewIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedViewIndex = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF1E88E5) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? const Color(0xFF1E88E5) : Colors.grey.shade300),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey[700],
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
       ),
     );
   }
@@ -137,8 +205,16 @@ class ParticipantJobBoard extends StatelessWidget {
 class JobCard extends StatelessWidget {
   final Project project;
   final List<String> userSkills;
+  final bool isSaved;
+  final VoidCallback onToggleSave;
 
-  const JobCard({super.key, required this.project, required this.userSkills});
+  const JobCard({
+    super.key,
+    required this.project,
+    required this.userSkills,
+    required this.isSaved,
+    required this.onToggleSave,
+  });
 
   int _calculateMatchPercentage() {
     if (project.skills.isEmpty) return 100; // If project has no strict requirements
@@ -210,7 +286,14 @@ class JobCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const Icon(Icons.bookmark_border, color: Colors.grey),
+                  // --- FUNCTIONAL SAVE BUTTON ---
+                  GestureDetector(
+                    onTap: onToggleSave,
+                    child: Icon(
+                      isSaved ? Icons.bookmark : Icons.bookmark_border,
+                      color: isSaved ? Colors.blue : Colors.grey,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -264,7 +347,6 @@ class JobCard extends StatelessWidget {
                 children: [
                   _buildInfoPill(Icons.access_time, "Duration", project.timeline),
                   const SizedBox(width: 16),
-                  // CHANGED: Label from "Pay" to "Value" to represent Total Project Investment
                   _buildInfoPill(Icons.attach_money, "Value", "RM ${project.totalBudget}"),
                 ],
               ),
@@ -288,7 +370,6 @@ class JobCard extends StatelessWidget {
                         if (success) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Application Sent!")));
                         } else if (appViewModel.error != null) {
-                          // --- FIX: Show Error Message if Application Failed ---
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(appViewModel.error!),
