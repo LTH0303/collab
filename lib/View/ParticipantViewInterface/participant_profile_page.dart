@@ -204,7 +204,7 @@ class ParticipantProfilePage extends StatelessWidget {
 
                     // --- REAL STAT CARDS (Earnings removed) ---
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly, // Changed to spaceEvenly
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         _buildStatCard(activeJobs.toString(), "Active\nJob", Icons.work_outline, Colors.blue),
                         _buildStatCard("${userProfile.skills.length}", "Skills", Icons.school_outlined, Colors.orange),
@@ -417,13 +417,21 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _locationController;
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
+  final TextEditingController _customSkillController = TextEditingController(); // NEW
   Set<String> _selectedSkills = {};
 
   final List<String> _commonSkills = [
+    // Original Skills
     "Farming", "Agriculture", "Driving", "Carpentry",
     "Plumbing", "Electrical", "Cooking", "Sewing",
     "Construction", "Welding", "Painting", "Gardening",
-    "Computer Basics", "Accounting", "Teaching"
+    "Computer Basics", "Accounting", "Teaching",
+
+    // NEW Expanded Skills
+    "Digital Literacy", "Event Planning", "Public Speaking", "First Aid",
+    "Childcare", "Elderly Care", "Translation", "Graphic Design",
+    "Photography", "Video Editing", "Social Media", "Logistics",
+    "Data Entry", "Tutoring", "Cleaning", "Food Safety"
   ];
 
   @override
@@ -444,6 +452,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
         _selectedSkills.add(skill);
       }
     });
+  }
+
+  // Method to add custom skill
+  void _addCustomSkill() {
+    final text = _customSkillController.text.trim();
+    if (text.isNotEmpty) {
+      setState(() {
+        // Capitalize first letter for consistency
+        String formatted = text[0].toUpperCase() + text.substring(1);
+        _selectedSkills.add(formatted);
+        _customSkillController.clear();
+      });
+    }
   }
 
   @override
@@ -500,36 +521,94 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
               const SizedBox(height: 24),
               _buildSectionTitle("Skills"),
-              const Text("Tap to select your skills:", style: TextStyle(fontSize: 14, color: Colors.grey)),
+
+              // 1. Custom Skill Input
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _customSkillController,
+                      decoration: InputDecoration(
+                        hintText: "Add other skill...",
+                        hintStyle: TextStyle(color: Colors.grey[400]),
+                        prefixIcon: const Icon(Icons.add_task, color: Colors.grey),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE3F2FD),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      onPressed: _addCustomSkill,
+                      icon: const Icon(Icons.add, color: Color(0xFF1565C0)),
+                      tooltip: "Add Skill",
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              const Text("Select or add your skills:", style: TextStyle(fontSize: 14, color: Colors.grey)),
               const SizedBox(height: 12),
 
               Wrap(
                 spacing: 8.0,
                 runSpacing: 8.0,
-                children: _commonSkills.map((skill) {
-                  final isSelected = _selectedSkills.contains(skill);
-                  return FilterChip(
-                    label: Text(skill),
-                    selected: isSelected,
-                    onSelected: (bool selected) {
-                      _toggleSkill(skill);
-                    },
-                    selectedColor: const Color(0xFFE3F2FD),
-                    checkmarkColor: const Color(0xFF1565C0),
-                    labelStyle: TextStyle(
-                      color: isSelected ? const Color(0xFF1565C0) : Colors.black87,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    ),
-                    backgroundColor: Colors.grey[100],
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isSelected ? const Color(0xFF1565C0) : Colors.transparent,
-                        width: 1,
+                children: [
+                  // 2. Display User-Added Custom Skills (Chips with Delete)
+                  ..._selectedSkills.where((s) => !_commonSkills.contains(s)).map((skill) {
+                    return InputChip(
+                      label: Text(skill),
+                      selected: true,
+                      onSelected: (bool selected) {},
+                      onDeleted: () => _toggleSkill(skill),
+                      selectedColor: const Color(0xFFE3F2FD),
+                      deleteIconColor: const Color(0xFF1565C0),
+                      labelStyle: const TextStyle(
+                        color: Color(0xFF1565C0),
+                        fontWeight: FontWeight.bold,
                       ),
-                    ),
-                  );
-                }).toList(),
+                      backgroundColor: Colors.grey[100],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: const BorderSide(color: Color(0xFF1565C0), width: 1),
+                      ),
+                    );
+                  }),
+
+                  // 3. Display Common Skills (Filter Chips)
+                  ..._commonSkills.map((skill) {
+                    final isSelected = _selectedSkills.contains(skill);
+                    return FilterChip(
+                      label: Text(skill),
+                      selected: isSelected,
+                      onSelected: (bool selected) {
+                        _toggleSkill(skill);
+                      },
+                      selectedColor: const Color(0xFFE3F2FD),
+                      checkmarkColor: const Color(0xFF1565C0),
+                      labelStyle: TextStyle(
+                        color: isSelected ? const Color(0xFF1565C0) : Colors.black87,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      backgroundColor: Colors.grey[100],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color: isSelected ? const Color(0xFF1565C0) : Colors.transparent,
+                          width: 1,
+                        ),
+                      ),
+                    );
+                  }),
+                ],
               ),
             ],
           ),
