@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Added for InputFormatters
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firestore access
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/DatabaseService/database_service.dart';
 import '../../models/ProjectRepository/project_model.dart';
 
-// --- RELIABILITY STRATEGY CLASSES (Copied for local use) ---
+// --- RELIABILITY STRATEGY CLASSES ---
 abstract class ReliabilityStrategy {
   String get label;
   Color get primaryColor;
@@ -66,6 +67,29 @@ class ParticipantMyTasksPage extends StatelessWidget {
     return LowReliabilityStrategy();
   }
 
+  String _formatDate(DateTime date) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return "${months[date.month - 1]} ${date.day}, ${date.year}";
+  }
+
+  // Helper to trigger expiration checks
+  void _triggerExpirationChecks(List<Project> projects) {
+    final db = DatabaseService();
+    for (var project in projects) {
+      if (project.id == null) continue;
+      for (int i = 0; i < project.milestones.length; i++) {
+        var m = project.milestones[i];
+        // Only check if it has a due date and is ostensibly open or in progress
+        if (m.submissionDueDate != null && m.isOpen) {
+          if (DateTime.now().isAfter(m.submissionDueDate!)) {
+            // Fire and forget - don't await to avoid blocking UI build
+            db.checkAndMarkExpiredSubmissions(project.id!, i);
+          }
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -87,7 +111,6 @@ class ParticipantMyTasksPage extends StatelessWidget {
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
               builder: (context, snapshot) {
-                // Default values if loading or error
                 int score = 100;
 
                 if (snapshot.hasData && snapshot.data!.exists) {
@@ -165,6 +188,11 @@ class ParticipantMyTasksPage extends StatelessWidget {
                     ),
                   );
                 }
+
+                // Trigger expiration check on load
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _triggerExpirationChecks(snapshot.data!);
+                });
 
                 return ListView.builder(
                   shrinkWrap: true,
@@ -286,6 +314,12 @@ class ParticipantMyTasksPage extends StatelessWidget {
     }
 
     String status = mySubmission?.status ?? 'none';
+
+    // Check if overdue
+    bool isOverdue = false;
+    if (m.submissionDueDate != null && m.isOpen && status != 'approved' && status != 'pending' && DateTime.now().isAfter(m.submissionDueDate!)) {
+      isOverdue = true;
+    }
 
     // --- STATE LOGIC ---
 
@@ -447,13 +481,30 @@ class ParticipantMyTasksPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        m.taskName,
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: m.isLocked ? Colors.grey : Colors.black87
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              m.taskName,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: m.isLocked ? Colors.grey : Colors.black87
+                              ),
+                            ),
+                          ),
+                          // --- DUE DATE ---
+                          if (m.submissionDueDate != null)
+                            Text(
+                              "Due: ${_formatDate(m.submissionDueDate!)}",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isOverdue ? Colors.red : Colors.grey[600],
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       statusWidget,
@@ -676,6 +727,25 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
                 style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
             const SizedBox(height: 12),
 
+            // --- RESTORED DUE DATE DISPLAY IN DIALOG ---
+            if (milestone.submissionDueDate != null) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                        "Due Date: ${_formatDate(milestone.submissionDueDate!)}",
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             const Text("Proof of Work (Photo) *", style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             GestureDetector(
@@ -733,7 +803,10 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
             const Text("Expenses Incurred (RM)", style: TextStyle(fontWeight: FontWeight.bold)),
             TextField(
               controller: _expenseController,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              ],
               decoration: const InputDecoration(
                 hintText: "e.g., 50.00",
                 prefixText: "RM ",
@@ -750,6 +823,10 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
           onPressed: _isUploading ? null : () async {
             if (_expenseController.text.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter expenses amount")));
+              return;
+            }
+            if (double.tryParse(_expenseController.text) == null) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a valid number")));
               return;
             }
             if (_imageFile == null) {
@@ -797,5 +874,10 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
         ),
       ],
     );
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return "${months[date.month - 1]} ${date.day}, ${date.year}";
   }
 }

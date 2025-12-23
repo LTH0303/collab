@@ -123,7 +123,11 @@ class DatabaseService {
   // --- PROJECT METHODS ---
 
   Future<void> addProject(Project project, String leaderId) async {
-    project.status = 'active';
+    // UPDATED: Respect the status passed in the project object (default 'draft' if empty)
+    if (project.status.isEmpty) {
+      project.status = 'draft';
+    }
+
     project.createdAt = DateTime.now();
     for (var m in project.milestones) {
       m.status = 'locked';
@@ -133,6 +137,24 @@ class DatabaseService {
       'leader_id': leaderId,
       'active_participants': [],
     });
+  }
+
+  // NEW: Publish a draft project (update status to 'active')
+  Future<void> publishProjectFromDraft(String projectId) async {
+    await _db.collection('projects').doc(projectId).update({
+      'status': 'active',
+      // We keep original created_at or update it? Keeping original created_at is safer for sorting.
+    });
+  }
+
+  // NEW: Update generic project details (for Edit Page)
+  Future<void> updateProjectDetails(String projectId, Map<String, dynamic> data) async {
+    await _db.collection('projects').doc(projectId).update(data);
+  }
+
+  // NEW: Delete a project (for removing drafts)
+  Future<void> deleteProject(String projectId) async {
+    await _db.collection('projects').doc(projectId).delete();
   }
 
   Future<void> startProject(String projectId) async {
@@ -152,6 +174,7 @@ class DatabaseService {
     }
   }
 
+  // FIXED: unlockNextPhase logic to allow MISSED submissions
   Future<void> unlockNextPhase(String projectId, int currentPhaseIndex) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
     final snapshot = await projectRef.get();
@@ -165,7 +188,25 @@ class DatabaseService {
     List<Milestone> milestones = milestonesRaw.map((m) => Milestone.fromJson(m)).toList();
 
     if (currentPhaseIndex < milestones.length) {
-      await _penalizeNoShows(milestones[currentPhaseIndex], activeParticipants, projectTitle);
+      var milestone = milestones[currentPhaseIndex];
+
+      // 1. Filter latest submissions
+      _removeDuplicateSubmissions(milestone);
+
+      // 2. BLOCK if there are pending submissions
+      if (milestone.submissions.any((s) => s.status == 'pending')) {
+        throw Exception("Cannot unlock next phase: Some submissions are still pending review.");
+      }
+
+      // 3. BLOCK if there are rejected submissions
+      if (milestone.submissions.any((s) => s.status == 'rejected')) {
+        throw Exception("Cannot unlock next phase: Rejected submissions must be resolved (re-uploaded or expired).");
+      }
+
+      // Note: 'missed' and 'approved' are allowed to proceed.
+
+      // 4. Handle penalties for no-shows before closing
+      await _penalizeNoShows(milestone, activeParticipants, projectTitle);
     }
 
     milestones[currentPhaseIndex].status = 'completed';
@@ -259,6 +300,19 @@ class DatabaseService {
         .where('status', isEqualTo: 'active')
         .get();
     return snapshot.docs.isNotEmpty;
+  }
+
+  // --- NEW: Retrieve Application Object for ID ---
+  Future<Application?> getUserApplicationForProject(String userId, String projectId) async {
+    final snapshot = await _db.collection('applications')
+        .where('applicant_id', isEqualTo: userId)
+        .where('project_id', isEqualTo: projectId)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isNotEmpty) {
+      return Application.fromJson(snapshot.docs.first.data(), docId: snapshot.docs.first.id);
+    }
+    return null;
   }
 
   Stream<List<Project>> getParticipantActiveProjects(String userId) {

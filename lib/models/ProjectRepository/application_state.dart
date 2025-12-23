@@ -5,7 +5,6 @@ import 'i_application_repository.dart';
 import 'application_model.dart';
 
 /// Context Interface
-/// The State objects need access to the Repository to perform actions.
 abstract class ApplicationContext {
   IApplicationRepository get repository;
 }
@@ -16,7 +15,7 @@ abstract class ApplicationState {
   String get labelText;
   String get participantButtonText;
   bool get isLeaderActionable; // Can leader approve/reject?
-  bool get isParticipantActionable; // Can participant apply/withdraw?
+  bool get isParticipantActionable; // Can participant withdraw?
 
   // Actions
   Future<void> approve(Application app, IApplicationRepository repo);
@@ -38,50 +37,38 @@ abstract class ApplicationState {
   }
 }
 
-/// Concrete State: Pending
 class PendingState extends ApplicationState {
   @override
   Color get displayColor => Colors.orange;
-
   @override
   String get labelText => "Pending Review";
-
   @override
   String get participantButtonText => "Pending";
-
   @override
   bool get isLeaderActionable => true;
-
   @override
-  bool get isParticipantActionable => false;
+  bool get isParticipantActionable => true; // Allows Withdraw
 
   @override
   Future<void> approve(Application app, IApplicationRepository repo) async {
-    // Logic to move to Approved state
     await repo.approveApplication(app);
   }
 
   @override
   Future<void> reject(Application app, IApplicationRepository repo) async {
-    // Logic to move to Rejected state
     await repo.rejectApplication(app.id!);
   }
 }
 
-/// Concrete State: Approved (Hired)
 class ApprovedState extends ApplicationState {
   @override
   Color get displayColor => Colors.green;
-
   @override
   String get labelText => "Hired";
-
   @override
   String get participantButtonText => "Hired";
-
   @override
-  bool get isLeaderActionable => false; // Already hired, no further action usually
-
+  bool get isLeaderActionable => false;
   @override
   bool get isParticipantActionable => false;
 
@@ -92,27 +79,21 @@ class ApprovedState extends ApplicationState {
 
   @override
   Future<void> reject(Application app, IApplicationRepository repo) async {
-    // Optional: Allow firing/removing? For now, throw.
     throw Exception("Cannot reject an already hired applicant directly.");
   }
 }
 
-/// Concrete State: Rejected
 class RejectedState extends ApplicationState {
   @override
   Color get displayColor => Colors.red;
-
   @override
   String get labelText => "Rejected";
-
   @override
   String get participantButtonText => "Rejected";
-
   @override
   bool get isLeaderActionable => false;
-
   @override
-  bool get isParticipantActionable => false; // Could allow re-apply logic here if needed
+  bool get isParticipantActionable => false;
 
   @override
   Future<void> approve(Application app, IApplicationRepository repo) async {
@@ -125,22 +106,18 @@ class RejectedState extends ApplicationState {
   }
 }
 
-/// Concrete State: Withdrawn (or None)
 class WithdrawnState extends ApplicationState {
   @override
   Color get displayColor => Colors.grey;
-
   @override
   String get labelText => "Withdrawn";
-
   @override
-  String get participantButtonText => "Apply Now"; // If withdrawn/none, can apply
+  String get participantButtonText => "Withdrawn";
 
   @override
   bool get isLeaderActionable => false;
-
   @override
-  bool get isParticipantActionable => true;
+  bool get isParticipantActionable => false;
 
   @override
   Future<void> approve(Application app, IApplicationRepository repo) async {

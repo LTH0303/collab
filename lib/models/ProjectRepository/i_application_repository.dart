@@ -6,7 +6,8 @@ abstract class IApplicationRepository {
   Future<void> applyForJob(Application app);
   Stream<List<Application>> getLeaderApplications(String leaderId);
   Stream<List<Application>> getProjectApplications(String projectId);
-  Stream<List<Application>> getProjectApprovedApplications(String projectId); // NEW
+  Stream<List<Application>> getProjectApprovedApplications(String projectId);
   Future<void> approveApplication(Application app);
   Future<void> rejectApplication(String applicationId);
+  Future<void> withdrawApplication(String applicationId); // NEW
 }

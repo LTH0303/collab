@@ -27,12 +27,16 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   Widget build(BuildContext context) {
     final viewModel = Provider.of<PlannerViewModel>(context);
 
+    // FIXED: Clear error immediately after showing it to prevent loop
     if (viewModel.error != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(viewModel.error!),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
         ));
+        viewModel.clearError(); // <--- IMPORTANT FIX
       });
     }
 
@@ -99,48 +103,63 @@ class _ProjectsSectionState extends State<ProjectsSection> {
     );
   }
 
-  // UPDATED: Using the PageView layout from DraftView
+  // UPDATED: Now fetches drafts from Firestore via StreamBuilder
   Widget _buildDraftsList(PlannerViewModel viewModel) {
-    final drafts = viewModel.drafts;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox();
 
-    if (viewModel.isLoading) return const Center(child: CircularProgressIndicator());
-    if (drafts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    return StreamBuilder<List<Project>>(
+      stream: DatabaseService().getLeaderProjects(user.uid, 'draft'),
+      builder: (context, snapshot) {
+        if (viewModel.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final drafts = snapshot.data ?? [];
+
+        if (drafts.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.post_add, size: 64, color: Colors.grey[300]),
+                const SizedBox(height: 16),
+                const Text("No drafts found.", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                const Text("Use AI Planner to create one.", style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(Icons.post_add, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            const Text("Plan your projects before publishing", style: TextStyle(fontSize: 14, color: Colors.grey)),
+            const Text("Plan your projects before publishing", style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: drafts.length,
+                itemBuilder: (context, index) {
+                  // Display newest drafts first or based on DB order
+                  final draft = drafts[index];
+                  return _buildDraftPage(context, viewModel, draft);
+                },
+              ),
+            ),
           ],
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const SizedBox(height: 16),
-        const Text("Plan your projects before publishing", style: TextStyle(color: Colors.grey, fontSize: 12)),
-        const SizedBox(height: 16),
-        Expanded(
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: drafts.length,
-            itemBuilder: (context, index) {
-              // Display newest drafts first
-              final draft = drafts[drafts.length - 1 - index];
-              final draftIndex = drafts.length - 1 - index;
-              return _buildDraftPage(context, viewModel, draft, draftIndex);
-            },
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
-  // ADDED: Draft Page Builder
-  Widget _buildDraftPage(BuildContext context, PlannerViewModel viewModel, Project draft, int index) {
+  // UPDATED: Draft Page Builder uses project.id
+  Widget _buildDraftPage(BuildContext context, PlannerViewModel viewModel, Project draft) {
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -183,18 +202,24 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.white),
                             onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => EditProjectPage(project: draft, projectIndex: index),
-                                ),
-                              );
+                              if (draft.id != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => EditProjectPage(project: draft, projectId: draft.id!),
+                                  ),
+                                );
+                              }
                             },
                           ),
-                          // DELETE BUTTON ACTION (Preserved from old logic)
+                          // DELETE BUTTON ACTION
                           IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.white),
-                            onPressed: () => viewModel.removeDraft(index),
+                            onPressed: () {
+                              if (draft.id != null) {
+                                viewModel.removeDraft(draft.id!);
+                              }
+                            },
                           ),
                         ],
                       ),
@@ -216,7 +241,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                       Text(draft.timeline, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
 
                       const SizedBox(height: 16),
-                      _sectionTitle("Total Budget"), // ADDED: Budget Display
+                      _sectionTitle("Total Budget"),
                       Text("RM ${draft.totalBudget}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
 
                       const SizedBox(height: 16),
@@ -296,8 +321,9 @@ class _ProjectsSectionState extends State<ProjectsSection> {
               height: 50,
               child: ElevatedButton(
                 onPressed: () async {
-                  await viewModel.publishDraft(index);
-                  // Optional: Show success message or navigate
+                  if (draft.id != null) {
+                    await viewModel.publishDraft(draft.id!);
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2E7D32),
@@ -363,7 +389,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                           const Text("Incentive:", style: TextStyle(fontWeight: FontWeight.bold)),
                           Text(milestone.incentive, style: const TextStyle(color: Colors.orange)),
                           const SizedBox(height: 10),
-                          const Text("Allocated Budget:", style: TextStyle(fontWeight: FontWeight.bold)), // Added Budget info in dialog
+                          const Text("Allocated Budget:", style: TextStyle(fontWeight: FontWeight.bold)),
                           Text("RM ${milestone.allocatedBudget}", style: const TextStyle(color: Colors.green)),
                         ],
                       ),
@@ -390,7 +416,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                         style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                       ),
                       Text(
-                        "Budget: RM ${milestone.allocatedBudget}", // Added budget preview
+                        "Budget: RM ${milestone.allocatedBudget}",
                         style: TextStyle(fontSize: 12, color: Colors.green[700], fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -807,13 +833,13 @@ class _ProjectsSectionState extends State<ProjectsSection> {
 }
 
 // ---------------------------------------------------------------------------
-// NEW CLASS: EditProjectPage (Added Budget Field)
+// NEW CLASS: EditProjectPage (Updated to use DB via ViewModel)
 // ---------------------------------------------------------------------------
 class EditProjectPage extends StatefulWidget {
   final Project project;
-  final int projectIndex;
+  final String projectId; // Changed from index to ID
 
-  const EditProjectPage({super.key, required this.project, required this.projectIndex});
+  const EditProjectPage({super.key, required this.project, required this.projectId});
 
   @override
   State<EditProjectPage> createState() => _EditProjectPageState();
@@ -828,7 +854,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
   late TextEditingController _materialsController;
   late TextEditingController _descController;
   late TextEditingController _addressController;
-  late TextEditingController _budgetController; // Added Budget Controller
+  late TextEditingController _budgetController;
 
   late List<Milestone> _milestones;
 
@@ -843,7 +869,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
     _materialsController = TextEditingController(text: widget.project.startingResources.join(", "));
     _descController = TextEditingController(text: widget.project.description);
     _addressController = TextEditingController(text: widget.project.address);
-    _budgetController = TextEditingController(text: widget.project.totalBudget); // Init Budget
+    _budgetController = TextEditingController(text: widget.project.totalBudget);
 
     // Deep copy milestones so edits don't reflect immediately until saved
     _milestones = widget.project.milestones.map((m) => Milestone(
@@ -852,7 +878,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
       verificationType: m.verificationType,
       incentive: m.incentive,
       description: m.description,
-      allocatedBudget: m.allocatedBudget, // Copied allocated budget
+      allocatedBudget: m.allocatedBudget,
     )).toList();
   }
 
@@ -869,29 +895,29 @@ class _EditProjectPageState extends State<EditProjectPage> {
     super.dispose();
   }
 
-  void _saveChanges() {
-    // 1. Update Project Data via ViewModel
+  Future<void> _saveChanges() async {
+    // 1. Prepare Data
     final updatedSkills = _skillsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
     final updatedMaterials = _materialsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
     final plannerVM = Provider.of<PlannerViewModel>(context, listen: false);
 
-    // Direct modification in ViewModel (as per previous logic)
-    final updatedProject = widget.project;
-    updatedProject.title = _titleController.text;
-    updatedProject.timeline = _timelineController.text;
-    updatedProject.skills = updatedSkills;
-    updatedProject.participantRange = _participantsController.text;
-    updatedProject.startingResources = updatedMaterials;
-    updatedProject.description = _descController.text;
-    updatedProject.address = _addressController.text;
-    updatedProject.totalBudget = _budgetController.text; // Save Budget
-    updatedProject.milestones = _milestones;
+    final updatedData = {
+      'project_title': _titleController.text,
+      'timeline': _timelineController.text,
+      'required_skills': updatedSkills,
+      'participant_range': _participantsController.text,
+      'starting_resources': updatedMaterials,
+      'description': _descController.text,
+      'address': _addressController.text,
+      'total_budget': _budgetController.text,
+      'milestones': _milestones.map((m) => m.toJson()).toList(),
+    };
 
-    // Trigger listener update
-    plannerVM.updateDraft(widget.projectIndex);
+    // 2. Call ViewModel to update DB
+    await plannerVM.updateDraft(widget.projectId, updatedData);
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   void _addNewMilestone() {
@@ -899,7 +925,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
     final phaseCtrl = TextEditingController();
     final incentiveCtrl = TextEditingController();
     final descCtrl = TextEditingController();
-    final budgetCtrl = TextEditingController(); // Added budget field for milestone
+    final budgetCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -932,7 +958,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
                     verificationType: "Photo",
                     incentive: incentiveCtrl.text,
                     description: descCtrl.text,
-                    allocatedBudget: budgetCtrl.text.isEmpty ? "0" : budgetCtrl.text, // Set budget
+                    allocatedBudget: budgetCtrl.text.isEmpty ? "0" : budgetCtrl.text,
                   ));
                 });
                 Navigator.pop(context);
@@ -984,7 +1010,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   verificationType: m.verificationType,
                   incentive: incentiveCtrl.text,
                   description: descCtrl.text,
-                  allocatedBudget: budgetCtrl.text.isEmpty ? "0" : budgetCtrl.text, // Save budget
+                  allocatedBudget: budgetCtrl.text.isEmpty ? "0" : budgetCtrl.text,
                 );
               });
               Navigator.pop(context);
@@ -1025,7 +1051,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
             _buildTextField(_titleController, "e.g. Community Organic Farming"),
 
             const SizedBox(height: 16),
-            _buildLabel("Total Budget (RM) *"), // ADDED: Budget Input
+            _buildLabel("Total Budget (RM) *"),
             _buildTextField(_budgetController, "e.g. 5000", maxLines: 1),
 
             const SizedBox(height: 16),

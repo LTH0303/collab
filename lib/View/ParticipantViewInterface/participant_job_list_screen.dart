@@ -217,30 +217,25 @@ class JobCard extends StatelessWidget {
   });
 
   int _calculateMatchPercentage() {
-    if (project.skills.isEmpty) return 100; // If project has no strict requirements
-    if (userSkills.isEmpty) return 0;       // If user has no skills
+    if (project.skills.isEmpty) return 100;
+    if (userSkills.isEmpty) return 0;
 
-    // Normalize strings for flexible comparison (trim + lowercase)
     final pSkills = project.skills.map((s) => s.toLowerCase().trim()).toList();
     final uSkills = userSkills.map((s) => s.toLowerCase().trim()).toSet();
 
     int matches = 0;
 
     for (var reqSkill in pSkills) {
-      // 1. Exact Match (Normalized)
       if (uSkills.contains(reqSkill)) {
         matches++;
         continue;
       }
-
-      // 2. Partial Match / Substring (e.g., "Farm" matches "Farming")
       bool partialMatch = uSkills.any((uSkill) => uSkill.contains(reqSkill) || reqSkill.contains(uSkill));
       if (partialMatch) {
         matches++;
       }
     }
 
-    // Calculation: (Matched Skills / Required Skills) * 100
     double percent = (matches / pSkills.length) * 100;
     return percent.clamp(0, 100).toInt();
   }
@@ -255,7 +250,11 @@ class JobCard extends StatelessWidget {
       builder: (context, snapshot) {
         String statusString = snapshot.data ?? 'none';
         ApplicationState state = ApplicationState.fromString(statusString);
-        bool canApply = snapshot.data == null;
+        bool isPending = statusString == 'pending';
+        bool isWithdrawn = statusString == 'withdrawn';
+
+        // Allow apply if never applied (null) OR withdrawn
+        bool canApply = snapshot.data == null || isWithdrawn;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -286,7 +285,6 @@ class JobCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // --- FUNCTIONAL SAVE BUTTON ---
                   GestureDetector(
                     onTap: onToggleSave,
                     child: Icon(
@@ -315,7 +313,6 @@ class JobCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Match Detail Info (Highlights matching skills)
               if (project.skills.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
@@ -323,7 +320,6 @@ class JobCard extends StatelessWidget {
                     spacing: 4,
                     runSpacing: 4,
                     children: project.skills.map((s) {
-                      // Check for match logic same as calculation
                       String req = s.toLowerCase().trim();
                       bool hasSkill = userSkills.any((us) {
                         String userS = us.toLowerCase().trim();
@@ -362,8 +358,25 @@ class JobCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
+
+                  // APPLY / WITHDRAW / RE-APPLY BUTTON LOGIC
                   Expanded(
-                    child: ElevatedButton(
+                    child: isPending
+                        ? OutlinedButton(
+                      onPressed: () async {
+                        bool success = await appViewModel.withdrawApplication(project.id!);
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Application Withdrawn")));
+                        }
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text("Withdraw"),
+                    )
+                        : ElevatedButton(
                       onPressed: (canApply && !appViewModel.isLoading)
                           ? () async {
                         bool success = await appViewModel.applyForJob(project);
@@ -384,7 +397,12 @@ class JobCard extends StatelessWidget {
                       ),
                       child: appViewModel.isLoading
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(canApply ? "Apply Now" : state.participantButtonText, style: const TextStyle(color: Colors.white)),
+                          : Text(
+                          canApply
+                              ? (isWithdrawn ? "Re-apply" : "Apply Now")
+                              : state.participantButtonText,
+                          style: const TextStyle(color: Colors.white)
+                      ),
                     ),
                   ),
                 ],
