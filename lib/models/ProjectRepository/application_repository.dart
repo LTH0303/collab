@@ -11,6 +11,7 @@ class ApplicationRepository implements IApplicationRepository {
 
   @override
   Future<void> applyForJob(Application app) async {
+    // 1. Global Checks
     bool hasActiveJob = await _dbService.hasActiveJob(app.applicantId);
     if (hasActiveJob) {
       throw Exception("You already have an active project. Complete it first.");
@@ -21,11 +22,26 @@ class ApplicationRepository implements IApplicationRepository {
       throw Exception("You cannot have more than 5 active applications.");
     }
 
-    bool alreadyApplied = await _dbService.hasAppliedToProject(app.applicantId, app.projectId);
-    if (alreadyApplied) {
-      throw Exception("You have already applied to this project.");
+    // 2. Check for Existing Application
+    Application? existingApp = await _dbService.getUserApplicationForProject(app.applicantId, app.projectId);
+
+    if (existingApp != null) {
+      // Handle Re-application logic
+      if (existingApp.status == 'withdrawn') {
+        // Reactivate: Update status 'withdrawn' -> 'pending'
+        if (existingApp.id != null) {
+          await _dbService.updateApplicationStatus(existingApp.id!, 'pending');
+          return;
+        }
+      } else if (existingApp.status == 'rejected') {
+        // Optional: Allow re-apply after rejection? For now, block.
+        throw Exception("Your application was rejected. You cannot re-apply immediately.");
+      } else {
+        throw Exception("You have already applied to this project.");
+      }
     }
 
+    // 3. New Application
     await _dbService.addApplication(app);
   }
 
@@ -39,7 +55,6 @@ class ApplicationRepository implements IApplicationRepository {
     return _dbService.getProjectPendingApplications(projectId);
   }
 
-  // NEW Implementation
   @override
   Stream<List<Application>> getProjectApprovedApplications(String projectId) {
     return _dbService.getProjectApprovedApplications(projectId);
@@ -53,5 +68,10 @@ class ApplicationRepository implements IApplicationRepository {
   @override
   Future<void> rejectApplication(String applicationId) async {
     await _dbService.updateApplicationStatus(applicationId, 'rejected');
+  }
+
+  @override
+  Future<void> withdrawApplication(String applicationId) async {
+    await _dbService.updateApplicationStatus(applicationId, 'withdrawn');
   }
 }

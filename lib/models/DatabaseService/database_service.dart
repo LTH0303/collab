@@ -152,7 +152,7 @@ class DatabaseService {
     }
   }
 
-
+  // FIXED: unlockNextPhase logic to allow MISSED submissions
   Future<void> unlockNextPhase(String projectId, int currentPhaseIndex) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
     final snapshot = await projectRef.get();
@@ -278,6 +278,19 @@ class DatabaseService {
         .where('status', isEqualTo: 'active')
         .get();
     return snapshot.docs.isNotEmpty;
+  }
+
+  // --- NEW: Retrieve Application Object for ID ---
+  Future<Application?> getUserApplicationForProject(String userId, String projectId) async {
+    final snapshot = await _db.collection('applications')
+        .where('applicant_id', isEqualTo: userId)
+        .where('project_id', isEqualTo: projectId)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isNotEmpty) {
+      return Application.fromJson(snapshot.docs.first.data(), docId: snapshot.docs.first.id);
+    }
+    return null;
   }
 
   Stream<List<Project>> getParticipantActiveProjects(String userId) {

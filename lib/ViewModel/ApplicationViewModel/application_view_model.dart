@@ -65,6 +65,38 @@ class ApplicationViewModel extends ChangeNotifier {
     return await _dbService.getApplicationStatus(user.uid, projectId);
   }
 
+  // --- NEW: Withdraw Application ---
+  Future<bool> withdrawApplication(String projectId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // 1. Find Application Document
+      final app = await _dbService.getUserApplicationForProject(user.uid, projectId);
+
+      if (app != null && app.id != null) {
+        // 2. Call Repository to withdraw
+        await _repo.withdrawApplication(app.id!);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      _error = "Application not found.";
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   // --- LEADER ACTIONS ---
 
   Stream<List<Application>> getLeaderApplications() {

@@ -157,11 +157,14 @@ class ParticipantProfilePage extends StatelessWidget {
             stream: DatabaseService().getParticipantAllProjects(user.uid),
             builder: (context, projectSnapshot) {
               int activeJobs = 0;
+              int completedJobs = 0; // NEW: Track completed jobs
 
               if (projectSnapshot.hasData) {
                 final projects = projectSnapshot.data!;
                 // Count Active Jobs
                 activeJobs = projects.where((p) => p.status == 'active').length;
+                // Count Completed Jobs
+                completedJobs = projects.where((p) => p.status == 'completed').length;
               }
 
               return SingleChildScrollView(
@@ -202,11 +205,13 @@ class ParticipantProfilePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 30),
 
-                    // --- REAL STAT CARDS (Earnings removed) ---
+                    // --- REAL STAT CARDS ---
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween, // Even spacing
                       children: [
                         _buildStatCard(activeJobs.toString(), "Active\nJob", Icons.work_outline, Colors.blue),
+                        // NEW: Completed Jobs Card
+                        _buildStatCard(completedJobs.toString(), "Completed", Icons.check_circle_outline, Colors.green),
                         _buildStatCard("${userProfile.skills.length}", "Skills", Icons.school_outlined, Colors.orange),
                       ],
                     ),
@@ -353,7 +358,7 @@ class ParticipantProfilePage extends StatelessWidget {
 
   Widget _buildStatCard(String value, String label, IconData icon, Color color) {
     return Container(
-      width: 120, // Slightly wider since we have fewer cards
+      width: 100, // Reduced width slightly to fit 3 items comfortably
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
       child: Column(children: [
