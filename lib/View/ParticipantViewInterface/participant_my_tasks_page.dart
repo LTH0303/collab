@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Added for InputFormatters
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/DatabaseService/database_service.dart';
 import '../../models/ProjectRepository/project_model.dart';
 
-// --- RELIABILITY STRATEGY CLASSES (Copied for local use) ---
+// --- RELIABILITY STRATEGY CLASSES ---
 abstract class ReliabilityStrategy {
   String get label;
   Color get primaryColor;
@@ -110,7 +111,6 @@ class ParticipantMyTasksPage extends StatelessWidget {
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
               builder: (context, snapshot) {
-                // Default values if loading or error
                 int score = 100;
 
                 if (snapshot.hasData && snapshot.data!.exists) {
@@ -190,7 +190,6 @@ class ParticipantMyTasksPage extends StatelessWidget {
                 }
 
                 // Trigger expiration check on load
-                // We use addPostFrameCallback to ensure this runs after build to avoid "setState during build" errors
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _triggerExpirationChecks(snapshot.data!);
                 });
@@ -495,7 +494,7 @@ class ParticipantMyTasksPage extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // --- RESTORED DUE DATE ---
+                          // --- DUE DATE ---
                           if (m.submissionDueDate != null)
                             Text(
                               "Due: ${_formatDate(m.submissionDueDate!)}",
@@ -804,7 +803,10 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
             const Text("Expenses Incurred (RM)", style: TextStyle(fontWeight: FontWeight.bold)),
             TextField(
               controller: _expenseController,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              ],
               decoration: const InputDecoration(
                 hintText: "e.g., 50.00",
                 prefixText: "RM ",
@@ -821,6 +823,10 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
           onPressed: _isUploading ? null : () async {
             if (_expenseController.text.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter expenses amount")));
+              return;
+            }
+            if (double.tryParse(_expenseController.text) == null) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a valid number")));
               return;
             }
             if (_imageFile == null) {
