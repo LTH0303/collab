@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firestore access
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/DatabaseService/database_service.dart';
 import '../../models/ProjectRepository/project_model.dart';
 
@@ -64,6 +64,11 @@ class ParticipantMyTasksPage extends StatelessWidget {
     if (score >= 80) return HighReliabilityStrategy();
     if (score >= 50) return MediumReliabilityStrategy();
     return LowReliabilityStrategy();
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return "${months[date.month - 1]} ${date.day}, ${date.year}";
   }
 
   @override
@@ -287,6 +292,12 @@ class ParticipantMyTasksPage extends StatelessWidget {
 
     String status = mySubmission?.status ?? 'none';
 
+    // Check if overdue
+    bool isOverdue = false;
+    if (m.submissionDueDate != null && m.isOpen && status != 'approved' && status != 'pending' && DateTime.now().isAfter(m.submissionDueDate!)) {
+      isOverdue = true;
+    }
+
     // --- STATE LOGIC ---
 
     if (status == 'approved') {
@@ -447,13 +458,30 @@ class ParticipantMyTasksPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        m.taskName,
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: m.isLocked ? Colors.grey : Colors.black87
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              m.taskName,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: m.isLocked ? Colors.grey : Colors.black87
+                              ),
+                            ),
+                          ),
+                          // --- RESTORED DUE DATE ---
+                          if (m.submissionDueDate != null)
+                            Text(
+                              "Due: ${_formatDate(m.submissionDueDate!)}",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isOverdue ? Colors.red : Colors.grey[600],
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       statusWidget,
@@ -676,6 +704,25 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
                 style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
             const SizedBox(height: 12),
 
+            // --- RESTORED DUE DATE DISPLAY IN DIALOG ---
+            if (milestone.submissionDueDate != null) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                        "Due Date: ${_formatDate(milestone.submissionDueDate!)}",
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             const Text("Proof of Work (Photo) *", style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             GestureDetector(
@@ -797,5 +844,10 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
         ),
       ],
     );
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return "${months[date.month - 1]} ${date.day}, ${date.year}";
   }
 }

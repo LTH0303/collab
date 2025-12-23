@@ -80,17 +80,26 @@ class DatabaseService {
   }
 
   // --- HELPER: Check and Mark Expired Submissions ---
+  // RESTORED: Logic to handle due dates
   Future<void> _checkAndMarkExpiredSubmissions(Milestone milestone, List<String> activeParticipants, String projectTitle) async {
+    // 1. Check if due date exists and has passed
     if (milestone.submissionDueDate == null) return;
     if (!DateTime.now().isAfter(milestone.submissionDueDate!)) return;
 
+    // 2. Check existing submissions for rejected status after deadline
     for (var submission in milestone.submissions) {
       if (submission.status == 'rejected') {
         submission.status = 'missed';
         submission.rejectionReason = "System: Rejected submission not re-uploaded before due date";
+        // Apply penalty for failing to fix rejected work in time
         await _updateReliabilityScore(submission.userId, -20, "No Re-upload After Rejection", projectTitle: projectTitle);
       }
     }
+
+    // 3. Check for No-Shows (Participants who never submitted)
+    // Note: _penalizeNoShows usually handles this on phase completion,
+    // but we can also trigger it here if the strict due date has passed.
+    await _penalizeNoShows(milestone, activeParticipants, projectTitle);
   }
 
   // --- HELPER: Penalize No-Shows ---
@@ -99,20 +108,23 @@ class DatabaseService {
 
     for (String participantId in activeParticipants) {
       if (!submittedUserIds.contains(participantId)) {
+        // Check if we already marked them as missed to avoid double penalty
         int existingMissedIndex = milestone.submissions.indexWhere(
                 (s) => s.userId == participantId && s.status == 'missed'
         );
 
         if (existingMissedIndex == -1) {
+          // Apply Penalty
           await _updateReliabilityScore(participantId, -20, "No Show", projectTitle: projectTitle);
 
+          // Add a "Missed" record so UI shows it
           milestone.submissions.add(MilestoneSubmission(
             userId: participantId,
             userName: "Participant (No Show)",
             expenseClaimed: "0",
             proofImageUrl: "",
             status: "missed",
-            rejectionReason: "System: Phase ended without submission",
+            rejectionReason: "System: Phase ended or due date passed without submission",
             submittedAt: DateTime.now(),
           ));
         }
@@ -165,6 +177,9 @@ class DatabaseService {
     List<Milestone> milestones = milestonesRaw.map((m) => Milestone.fromJson(m)).toList();
 
     if (currentPhaseIndex < milestones.length) {
+      // Before unlocking next, finalize current phase penalties
+      // This includes due date checks if they were set
+      await _checkAndMarkExpiredSubmissions(milestones[currentPhaseIndex], activeParticipants, projectTitle);
       await _penalizeNoShows(milestones[currentPhaseIndex], activeParticipants, projectTitle);
     }
 
@@ -204,6 +219,7 @@ class DatabaseService {
         throw Exception("Cannot complete milestone: Some submissions are rejected and need re-upload.");
       }
 
+      // Final checks before closing phase
       await _checkAndMarkExpiredSubmissions(milestone, activeParticipants, projectTitle);
       await _penalizeNoShows(milestone, activeParticipants, projectTitle);
 
@@ -294,6 +310,12 @@ class DatabaseService {
 
     if (milestoneIndex < milestones.length) {
       var milestone = milestones[milestoneIndex];
+
+      // Check due date before allowing submission (Optional strict check)
+      // if (milestone.submissionDueDate != null && DateTime.now().isAfter(milestone.submissionDueDate!)) {
+      //   throw Exception("Submission failed: The due date for this milestone has passed.");
+      // }
+
       int existingIndex = milestone.submissions.indexWhere((s) => s.userId == userId);
 
       final submission = MilestoneSubmission(
@@ -331,6 +353,7 @@ class DatabaseService {
       DateTime? oldDueDate = milestone.submissionDueDate;
       milestone.submissionDueDate = dueDate;
 
+      // If extending due date, potentially reset 'missed' status if logical
       if (oldDueDate != null && DateTime.now().isBefore(dueDate)) {
         milestone.submissions.removeWhere((submission) {
           return submission.status == 'missed' &&
@@ -344,6 +367,7 @@ class DatabaseService {
     }
   }
 
+  // Public method for ViewModel to trigger check manually if needed
   Future<void> checkAndMarkExpiredSubmissions(String projectId, int milestoneIndex) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
     final snapshot = await projectRef.get();
@@ -361,7 +385,9 @@ class DatabaseService {
       _removeDuplicateSubmissions(milestone);
       bool updated = false;
 
+      // Logic block restored here as well for explicit calls
       if (milestone.submissionDueDate != null && DateTime.now().isAfter(milestone.submissionDueDate!)) {
+        // 1. Penalize Rejects not fixed
         for (var submission in milestone.submissions) {
           if (submission.status == 'rejected') {
             submission.status = 'missed';
@@ -371,6 +397,7 @@ class DatabaseService {
           }
         }
 
+        // 2. Penalize No Shows
         Set<String> submittedUserIds = milestone.submissions.map((s) => s.userId).toSet();
         for (String participantId in activeParticipants) {
           if (!submittedUserIds.contains(participantId)) {
