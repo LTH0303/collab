@@ -189,8 +189,23 @@ class _AIPlannerSectionState extends State<AIPlannerSection> {
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
               onPressed: viewModel.isLoading ? null : () async {
                 if (_resourceController.text.isEmpty || _budgetController.text.isEmpty) return;
+
+                // 收起键盘
+                FocusScope.of(context).unfocus();
+
                 await viewModel.generatePlan(_resourceController.text, _budgetController.text);
-                if (viewModel.drafts.isNotEmpty) widget.onGenerateSuccess();
+
+                // UPDATED: 检查是否有错误，而不是检查本地 drafts 列表
+                // 因为现在直接存入数据库，没有本地列表了
+                if (viewModel.error == null) {
+                  widget.onGenerateSuccess();
+                } else {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Error: ${viewModel.error}"), backgroundColor: Colors.red),
+                    );
+                  }
+                }
               },
               icon: const Icon(Icons.auto_awesome, color: Colors.white),
               label: Text(viewModel.isLoading ? "Generating..." : "Generate Proposal", style: const TextStyle(color: Colors.white)),

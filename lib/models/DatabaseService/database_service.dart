@@ -123,7 +123,11 @@ class DatabaseService {
   // --- PROJECT METHODS ---
 
   Future<void> addProject(Project project, String leaderId) async {
-    project.status = 'active';
+    // UPDATED: Respect the status passed in the project object (default 'draft' if empty)
+    if (project.status.isEmpty) {
+      project.status = 'draft';
+    }
+
     project.createdAt = DateTime.now();
     for (var m in project.milestones) {
       m.status = 'locked';
@@ -133,6 +137,24 @@ class DatabaseService {
       'leader_id': leaderId,
       'active_participants': [],
     });
+  }
+
+  // NEW: Publish a draft project (update status to 'active')
+  Future<void> publishProjectFromDraft(String projectId) async {
+    await _db.collection('projects').doc(projectId).update({
+      'status': 'active',
+      // We keep original created_at or update it? Keeping original created_at is safer for sorting.
+    });
+  }
+
+  // NEW: Update generic project details (for Edit Page)
+  Future<void> updateProjectDetails(String projectId, Map<String, dynamic> data) async {
+    await _db.collection('projects').doc(projectId).update(data);
+  }
+
+  // NEW: Delete a project (for removing drafts)
+  Future<void> deleteProject(String projectId) async {
+    await _db.collection('projects').doc(projectId).delete();
   }
 
   Future<void> startProject(String projectId) async {

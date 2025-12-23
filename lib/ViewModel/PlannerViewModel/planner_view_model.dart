@@ -4,33 +4,42 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/ProjectRepository/i_project_repository.dart';
 import '../../models/ProjectRepository/project_model.dart';
-import '../../models/DatabaseService/database_service.dart'; // Direct DB access for count
+import '../../models/DatabaseService/database_service.dart';
 
 class PlannerViewModel extends ChangeNotifier {
   final IProjectRepository _repository;
-  // We might need direct DB service for count checks if not in Repo interface,
-  // or add count method to Interface. For speed, injecting DB Service here is acceptable.
   final DatabaseService _dbService = DatabaseService();
 
   PlannerViewModel(this._repository);
 
-  final List<Project> _drafts = [];
+  // We no longer keep a local list _drafts because UI will stream from Firestore
   bool _isLoading = false;
   String? _error;
 
-  List<Project> get drafts => _drafts;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // Action: Generate Plan
+  // Action: Generate Plan and Save to DB as Draft
   Future<void> generatePlan(String resources, String budget) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception("User must be logged in to generate a plan");
+      }
+
+      // 1. Get AI Draft
       Project newDraft = await _repository.getAIRecommendation(resources, budget);
-      _drafts.add(newDraft);
+
+      // 2. Set status to 'draft' ensuring it doesn't go live yet
+      newDraft.status = 'draft';
+
+      // 3. Save directly to DB
+      await _dbService.addProject(newDraft, user.uid);
+
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -39,15 +48,19 @@ class PlannerViewModel extends ChangeNotifier {
     }
   }
 
-  void updateDraft(int index) {
-    // 因为在编辑页面是直接修改引用的 Project 对象，
-    // 所以这里只需要调用 notifyListeners() 来刷新 UI 即可。
-    notifyListeners();
+  // Update existing draft in DB
+  Future<void> updateDraft(String projectId, Map<String, dynamic> data) async {
+    try {
+      await _dbService.updateProjectDetails(projectId, data);
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
   }
-  // Action: Publish with Constraint (Max 3)
-  Future<void> publishDraft(int index) async {
-    if (index < 0 || index >= _drafts.length) return;
 
+  // Action: Publish existing draft (Status 'draft' -> 'active')
+  Future<void> publishDraft(String projectId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _error = "User not logged in";
@@ -65,30 +78,25 @@ class PlannerViewModel extends ChangeNotifier {
         throw Exception("Limit Reached: You can only have 3 active projects at a time.");
       }
 
-      // 2. Publish (Pass leader ID inside project object or handled by repo)
-      // We need to ensure the Repo uses the leader ID.
-      // Ideally update Repo interface, but for now we can update the draft object if needed
-      // or assume Repo handles the "addProject(project, leaderId)" call.
+      // 2. Update Status to Active
+      await _dbService.publishProjectFromDraft(projectId);
 
-      // FIX: Since IProjectRepository.publishProject(project) doesn't take ID,
-      // let's assume we call _dbService directly here or update the repo.
-      // Let's go direct to DB service to match the updated method signature above.
-      await _dbService.addProject(_drafts[index], user.uid);
-
-      _drafts.removeAt(index);
-      _error = null; // Clear any previous errors
+      _error = null;
 
     } catch (e) {
-      _error = e.toString().replaceAll("Exception: ", ""); // Clean error msg
+      _error = e.toString().replaceAll("Exception: ", "");
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  void removeDraft(int index) {
-    if (index >= 0 && index < _drafts.length) {
-      _drafts.removeAt(index);
+  // Remove Draft from DB
+  Future<void> removeDraft(String projectId) async {
+    try {
+      await _dbService.deleteProject(projectId);
+    } catch (e) {
+      _error = e.toString();
       notifyListeners();
     }
   }
