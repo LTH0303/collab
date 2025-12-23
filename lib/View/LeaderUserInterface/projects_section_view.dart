@@ -27,12 +27,16 @@ class _ProjectsSectionState extends State<ProjectsSection> {
   Widget build(BuildContext context) {
     final viewModel = Provider.of<PlannerViewModel>(context);
 
+    // FIXED: Clear error immediately after showing it to prevent loop
     if (viewModel.error != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(viewModel.error!),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
         ));
+        viewModel.clearError(); // <--- IMPORTANT FIX
       });
     }
 
@@ -124,7 +128,8 @@ class _ProjectsSectionState extends State<ProjectsSection> {
               children: [
                 Icon(Icons.post_add, size: 64, color: Colors.grey[300]),
                 const SizedBox(height: 16),
-                const Text("Plan your projects before publishing", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                const Text("No drafts found.", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                const Text("Use AI Planner to create one.", style: TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
           );

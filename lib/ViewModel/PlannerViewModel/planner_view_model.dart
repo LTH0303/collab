@@ -19,6 +19,14 @@ class PlannerViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  // --- NEW: Clear Error Method ---
+  void clearError() {
+    _error = null;
+    // We don't necessarily need to notifyListeners() here if called inside a build frame callback,
+    // but it ensures the state is clean for the next cycle.
+    notifyListeners();
+  }
+
   // Action: Generate Plan and Save to DB as Draft
   Future<void> generatePlan(String resources, String budget) async {
     _isLoading = true;
