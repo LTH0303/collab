@@ -71,6 +71,24 @@ class ParticipantMyTasksPage extends StatelessWidget {
     return "${months[date.month - 1]} ${date.day}, ${date.year}";
   }
 
+  // Helper to trigger expiration checks
+  void _triggerExpirationChecks(List<Project> projects) {
+    final db = DatabaseService();
+    for (var project in projects) {
+      if (project.id == null) continue;
+      for (int i = 0; i < project.milestones.length; i++) {
+        var m = project.milestones[i];
+        // Only check if it has a due date and is ostensibly open or in progress
+        if (m.submissionDueDate != null && m.isOpen) {
+          if (DateTime.now().isAfter(m.submissionDueDate!)) {
+            // Fire and forget - don't await to avoid blocking UI build
+            db.checkAndMarkExpiredSubmissions(project.id!, i);
+          }
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -170,6 +188,12 @@ class ParticipantMyTasksPage extends StatelessWidget {
                     ),
                   );
                 }
+
+                // Trigger expiration check on load
+                // We use addPostFrameCallback to ensure this runs after build to avoid "setState during build" errors
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _triggerExpirationChecks(snapshot.data!);
+                });
 
                 return ListView.builder(
                   shrinkWrap: true,
