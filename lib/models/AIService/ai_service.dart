@@ -9,7 +9,7 @@ class AIService {
 
   AIService() {
     // Ideally use environment variables for keys
-    const apiKey = "AIzaSyB8Ufbx3qf4wTHQifc0gp2mBvguAC9LEj0";
+    const apiKey = "-";
     _model = GenerativeModel(
       model: 'gemini-2.5-flash',
       apiKey: apiKey,
