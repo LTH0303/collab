@@ -56,6 +56,32 @@ class PlannerViewModel extends ChangeNotifier {
     }
   }
 
+  // --- NEW: Manually Add Draft ---
+  Future<void> addManualDraft(Project newDraft) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception("User must be logged in to add a draft");
+      }
+
+      // Ensure status is draft
+      newDraft.status = 'draft';
+
+      // Save to DB
+      await _dbService.addProject(newDraft, user.uid);
+
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // Update existing draft in DB
   Future<void> updateDraft(String projectId, Map<String, dynamic> data) async {
     try {

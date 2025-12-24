@@ -40,31 +40,56 @@ class _ProjectsSectionState extends State<ProjectsSection> {
       });
     }
 
-    return Column(
+    return Stack(
       children: [
-        const SizedBox(height: 16),
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Row(
-            children: [
-              _buildSegmentButton("Draft", 0),
-              _buildSegmentButton("Active", 1),
-              _buildSegmentButton("Completed", 2),
-            ],
-          ),
+        Column(
+          children: [
+            const SizedBox(height: 16),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  _buildSegmentButton("Draft", 0),
+                  _buildSegmentButton("Active", 1),
+                  _buildSegmentButton("Completed", 2),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            Expanded(
+              child: _buildContent(viewModel),
+            ),
+          ],
         ),
 
-        const SizedBox(height: 20),
-
-        Expanded(
-          child: _buildContent(viewModel),
-        ),
+        // --- NEW: Floating Add Button (Only for Draft Tab) ---
+        if (_selectedIndex == 0)
+          Positioned(
+            bottom: 20,
+            right: 20,
+            child: FloatingActionButton.extended(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    // Passing null means "Create New"
+                    builder: (context) => const EditProjectPage(),
+                  ),
+                );
+              },
+              backgroundColor: const Color(0xFF2E7D32),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text("New Draft", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ),
       ],
     );
   }
@@ -129,7 +154,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                 Icon(Icons.post_add, size: 64, color: Colors.grey[300]),
                 const SizedBox(height: 16),
                 const Text("No drafts found.", style: TextStyle(fontSize: 14, color: Colors.grey)),
-                const Text("Use AI Planner to create one.", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const Text("Click the + button to create one.", style: TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
           );
@@ -196,7 +221,8 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                         children: [
                           _tag("Draft", Colors.white.withOpacity(0.2)),
                           const SizedBox(width: 8),
-                          _tag("AI Generated", Colors.white.withOpacity(0.2)),
+                          // Only show AI tag if no leaderId (or logic you prefer), here simplified
+                          _tag("Work In Progress", Colors.white.withOpacity(0.2)),
                           const Spacer(),
                           // EDIT BUTTON ACTION
                           IconButton(
@@ -833,13 +859,13 @@ class _ProjectsSectionState extends State<ProjectsSection> {
 }
 
 // ---------------------------------------------------------------------------
-// NEW CLASS: EditProjectPage (Updated to use DB via ViewModel)
+// NEW CLASS: EditProjectPage (Refactored to support Creating New Drafts)
 // ---------------------------------------------------------------------------
 class EditProjectPage extends StatefulWidget {
-  final Project project;
-  final String projectId; // Changed from index to ID
+  final Project? project;
+  final String? projectId; // If null, we are creating a new draft
 
-  const EditProjectPage({super.key, required this.project, required this.projectId});
+  const EditProjectPage({super.key, this.project, this.projectId});
 
   @override
   State<EditProjectPage> createState() => _EditProjectPageState();
@@ -861,25 +887,29 @@ class _EditProjectPageState extends State<EditProjectPage> {
   @override
   void initState() {
     super.initState();
-    // Initialize with draft data
-    _titleController = TextEditingController(text: widget.project.title);
-    _timelineController = TextEditingController(text: widget.project.timeline);
-    _skillsController = TextEditingController(text: widget.project.skills.join(", "));
-    _participantsController = TextEditingController(text: widget.project.participantRange);
-    _materialsController = TextEditingController(text: widget.project.startingResources.join(", "));
-    _descController = TextEditingController(text: widget.project.description);
-    _addressController = TextEditingController(text: widget.project.address);
-    _budgetController = TextEditingController(text: widget.project.totalBudget);
+    // Initialize with draft data OR empty strings
+    _titleController = TextEditingController(text: widget.project?.title ?? "");
+    _timelineController = TextEditingController(text: widget.project?.timeline ?? "");
+    _skillsController = TextEditingController(text: widget.project?.skills.join(", ") ?? "");
+    _participantsController = TextEditingController(text: widget.project?.participantRange ?? "");
+    _materialsController = TextEditingController(text: widget.project?.startingResources.join(", ") ?? "");
+    _descController = TextEditingController(text: widget.project?.description ?? "");
+    _addressController = TextEditingController(text: widget.project?.address ?? "");
+    _budgetController = TextEditingController(text: widget.project?.totalBudget ?? "");
 
-    // Deep copy milestones so edits don't reflect immediately until saved
-    _milestones = widget.project.milestones.map((m) => Milestone(
-      phaseName: m.phaseName,
-      taskName: m.taskName,
-      verificationType: m.verificationType,
-      incentive: m.incentive,
-      description: m.description,
-      allocatedBudget: m.allocatedBudget,
-    )).toList();
+    // Deep copy milestones if they exist, else empty list
+    if (widget.project != null) {
+      _milestones = widget.project!.milestones.map((m) => Milestone(
+        phaseName: m.phaseName,
+        taskName: m.taskName,
+        verificationType: m.verificationType,
+        incentive: m.incentive,
+        description: m.description,
+        allocatedBudget: m.allocatedBudget,
+      )).toList();
+    } else {
+      _milestones = [];
+    }
   }
 
   @override
@@ -896,26 +926,55 @@ class _EditProjectPageState extends State<EditProjectPage> {
   }
 
   Future<void> _saveChanges() async {
+    // --- Validation: Ensure required fields are not empty ---
+    if (_titleController.text.trim().isEmpty ||
+        _budgetController.text.trim().isEmpty ||
+        _descController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please fill in all required fields (Title, Budget, Description)"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     // 1. Prepare Data
     final updatedSkills = _skillsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
     final updatedMaterials = _materialsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
     final plannerVM = Provider.of<PlannerViewModel>(context, listen: false);
 
-    final updatedData = {
-      'project_title': _titleController.text,
-      'timeline': _timelineController.text,
-      'required_skills': updatedSkills,
-      'participant_range': _participantsController.text,
-      'starting_resources': updatedMaterials,
-      'description': _descController.text,
-      'address': _addressController.text,
-      'total_budget': _budgetController.text,
-      'milestones': _milestones.map((m) => m.toJson()).toList(),
-    };
-
-    // 2. Call ViewModel to update DB
-    await plannerVM.updateDraft(widget.projectId, updatedData);
+    if (widget.projectId != null) {
+      // --- UPDATE EXISTING DRAFT ---
+      final updatedData = {
+        'project_title': _titleController.text,
+        'timeline': _timelineController.text,
+        'required_skills': updatedSkills,
+        'participant_range': _participantsController.text,
+        'starting_resources': updatedMaterials,
+        'description': _descController.text,
+        'address': _addressController.text,
+        'total_budget': _budgetController.text,
+        'milestones': _milestones.map((m) => m.toJson()).toList(),
+      };
+      await plannerVM.updateDraft(widget.projectId!, updatedData);
+    } else {
+      // --- CREATE NEW DRAFT ---
+      final newDraft = Project(
+        title: _titleController.text,
+        description: _descController.text,
+        timeline: _timelineController.text,
+        skills: updatedSkills,
+        participantRange: _participantsController.text,
+        startingResources: updatedMaterials,
+        address: _addressController.text,
+        totalBudget: _budgetController.text,
+        milestones: _milestones,
+        status: 'draft', // Explicitly draft
+      );
+      await plannerVM.addManualDraft(newDraft);
+    }
 
     if (mounted) Navigator.pop(context);
   }
@@ -1025,10 +1084,12 @@ class _EditProjectPageState extends State<EditProjectPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isCreating = widget.projectId == null;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Edit Project", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: Text(isCreating ? "Create New Draft" : "Edit Project", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -1097,7 +1158,12 @@ class _EditProjectPageState extends State<EditProjectPage> {
                 border: Border.all(color: Colors.grey.shade300),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: ListView.separated(
+              child: _milestones.isEmpty
+                  ? const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Center(child: Text("No milestones added yet.", style: TextStyle(color: Colors.grey))),
+              )
+                  : ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _milestones.length,
@@ -1132,7 +1198,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
-                    child: const Text("Save Changes", style: TextStyle(color: Colors.white, fontSize: 16)),
+                    child: Text(isCreating ? "Create Draft" : "Save Changes", style: const TextStyle(color: Colors.white, fontSize: 16)),
                   ),
                 ),
                 const SizedBox(width: 16),
