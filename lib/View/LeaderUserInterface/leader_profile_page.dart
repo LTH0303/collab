@@ -127,16 +127,8 @@ class LeaderProfilePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 30),
 
-                // --- 2. Stats Row ---
-                // (Static for now, could be dynamic later)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildStatCard("12", "Active\nProject", Icons.assignment_outlined, Colors.green),
-                    _buildStatCard("47", "Completed", Icons.check_circle_outline, Colors.blue),
-                    _buildStatCard("156", "Youth Hired", Icons.people_outline, Colors.orange),
-                  ],
-                ),
+                // --- 2. Stats Row (Synced with Firebase) ---
+                _LeaderStatsSection(userId: user.uid),
                 const SizedBox(height: 24),
 
                 // --- 3. Contact Info ---
@@ -193,30 +185,6 @@ class LeaderProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String value, String label, IconData icon, Color color) {
-    return Container(
-      width: 100,
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-          const SizedBox(height: 4),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSectionContainer({required String title, required List<Widget> children}) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -253,6 +221,92 @@ class LeaderProfilePage extends StatelessWidget {
               Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- NEW STATS WIDGET (Handles Firebase Sync) ---
+class _LeaderStatsSection extends StatelessWidget {
+  final String userId;
+  const _LeaderStatsSection({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    // Stream 1: Fetch Projects to calculate Active & Completed
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('projects')
+          .where('leader_id', isEqualTo: userId) // Changed from 'ownerId' to 'leader_id'
+          .snapshots(),
+      builder: (context, projectSnapshot) {
+        int activeCount = 0;
+        int completedCount = 0;
+
+        if (projectSnapshot.hasData) {
+          final docs = projectSnapshot.data!.docs;
+          // Filtering logic: case-insensitive check for status
+          activeCount = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final status = data['status']?.toString().toLowerCase() ?? '';
+            return status == 'active';
+          }).length;
+
+          completedCount = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final status = data['status']?.toString().toLowerCase() ?? '';
+            return status == 'completed';
+          }).length;
+        }
+
+        // Stream 2: Fetch Applications to calculate Youth Hired
+        // We query 'approved' applications for this leader directly
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('applications')
+              .where('leader_id', isEqualTo: userId) // Ensure application has 'leader_id'
+              .where('status', isEqualTo: 'approved') // Changed from 'hired' to 'approved'
+              .snapshots(),
+          builder: (context, appSnapshot) {
+            int hiredCount = 0;
+            if (appSnapshot.hasData) {
+              hiredCount = appSnapshot.data!.docs.length;
+            }
+
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildStatCard(activeCount.toString(), "Active\nProject", Icons.assignment_outlined, Colors.green),
+                _buildStatCard(completedCount.toString(), "Completed", Icons.check_circle_outline, Colors.blue),
+                _buildStatCard(hiredCount.toString(), "Youth Hired", Icons.people_outline, Colors.orange),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildStatCard(String value, String label, IconData icon, Color color) {
+    return Container(
+      width: 100,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 12),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+          const SizedBox(height: 4),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ],
       ),
     );
