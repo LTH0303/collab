@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Added for InputFormatters
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -821,14 +821,34 @@ class _SubmissionDialogState extends State<SubmissionDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
         ElevatedButton(
           onPressed: _isUploading ? null : () async {
+            // 1. Validation: Empty
             if (_expenseController.text.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter expenses amount")));
               return;
             }
-            if (double.tryParse(_expenseController.text) == null) {
+
+            // 2. Validation: Numeric check (Already handled by formatters but double check)
+            double? expense = double.tryParse(_expenseController.text);
+            if (expense == null) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a valid number")));
               return;
             }
+
+            // 3. Validation: Budget Limit
+            // Parse allocated budget (handling potential currency symbols or commas if stored that way)
+            // Assuming allocatedBudget is stored as "500" or "500.00" string in Project model.
+            double allocated = double.tryParse(widget.project.milestones[widget.index].allocatedBudget.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+
+            if (expense > allocated) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("Expense cannot exceed allocated budget of RM ${allocated.toStringAsFixed(2)}"),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return; // Stop submission
+            }
+
             if (_imageFile == null) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please upload a proof photo")));
               return;
