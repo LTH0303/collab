@@ -23,9 +23,35 @@ abstract class MilestoneState {
         .every((s) => s.state.isApproved || s.state.isMissed);
   }
 
+  // Check if all participants have submissions (approved or missed)
+  bool canBeCompletedWithParticipants(List<String> activeParticipants) {
+    if (activeParticipants.isEmpty) return false;
+
+    // Check that all participants have a submission (approved or missed)
+    Set<String> submittedUserIds = milestone.submissions.map((s) => s.userId).toSet();
+
+    // All participants must have submitted
+    for (String participantId in activeParticipants) {
+      if (!submittedUserIds.contains(participantId)) {
+        return false; // Missing submission from a participant
+      }
+    }
+
+    // Check that all existing submissions are either approved or missed (no pending/rejected)
+    if (milestone.submissions.any((s) => s.state.isPending)) return false;
+    if (milestone.submissions.any((s) => s.state.isRejected)) return false;
+
+    return true;
+  }
+
   bool get isDueDatePassed {
     if (milestone.submissionDueDate == null) return false;
-    return DateTime.now().isAfter(milestone.submissionDueDate!);
+    // FIX: Compare both in UTC to avoid timezone issues
+    // The due date from Firestore is stored as UTC (via toIso8601String())
+    // DateTime.now() is local time, so we convert both to UTC for accurate comparison
+    final nowUtc = DateTime.now().toUtc();
+    final dueDateUtc = milestone.submissionDueDate!.toUtc();
+    return nowUtc.isAfter(dueDateUtc);
   }
 
   int get rejectedSubmissionsCount =>

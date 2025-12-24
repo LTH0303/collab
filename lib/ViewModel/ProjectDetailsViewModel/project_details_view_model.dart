@@ -201,9 +201,27 @@ class ProjectDetailsViewModel extends ChangeNotifier {
   }
 
   Future<void> checkExpiredSubmissions(String projectId, int milestoneIndex) async {
+    print("🔄 ViewModel: checkExpiredSubmissions called for project $projectId, milestone $milestoneIndex");
     try {
       await _dbService.checkAndMarkExpiredSubmissions(projectId, milestoneIndex);
+      // IMPORTANT: Refresh project data after checking expired submissions
+      // This ensures the UI shows the newly created "missed" submissions
+      if (_project != null && _project!.id != null) {
+        print("🔄 ViewModel: Refreshing project data from Firestore...");
+        final updatedProject = await _dbService.getProjectById(_project!.id!);
+        if (updatedProject != null) {
+          print("✅ ViewModel: Project refreshed. Submissions count: ${updatedProject.milestones[milestoneIndex].submissions.length}");
+          _project = updatedProject;
+          notifyListeners(); // Trigger UI update to show missing submissions
+          print("✅ ViewModel: UI notified of changes");
+        } else {
+          print("❌ ViewModel: Failed to get updated project");
+        }
+      } else {
+        print("⚠️ ViewModel: Project or project ID is null");
+      }
     } catch (e) {
+      print("❌ ViewModel: Error in checkExpiredSubmissions: $e");
       _error = e.toString();
       notifyListeners();
     }

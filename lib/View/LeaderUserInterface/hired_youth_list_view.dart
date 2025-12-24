@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../ViewModel/ApplicationViewModel/application_view_model.dart';
 import '../../models/ProjectRepository/application_model.dart';
 import 'applicant_profile_view.dart'; // Reuse the profile view
@@ -62,28 +63,47 @@ class HiredYouthListView extends StatelessWidget {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        leading: const CircleAvatar(
-                          backgroundColor: Colors.green,
-                          child: Icon(Icons.person, color: Colors.white),
-                        ),
-                        title: Text(app.applicantName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: const Text("Status: Active Member"),
-                        trailing: OutlinedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ApplicantProfileView(
-                                  application: app,
-                                  showActions: false, // Hide buttons for hired members
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Text("Profile"),
-                        ),
+                      child: StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance.collection('users').doc(app.applicantId).snapshots(),
+                        builder: (context, userSnapshot) {
+                          // Fetch name from Firestore if available, otherwise use application name
+                          String displayName = app.applicantName;
+                          if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                            final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
+                            final firestoreName = userData?['name'] as String?;
+                            if (firestoreName != null && firestoreName.isNotEmpty) {
+                              displayName = firestoreName;
+                            }
+                          }
+                          // Fallback if still empty
+                          if (displayName.isEmpty) {
+                            displayName = "Unknown Participant";
+                          }
+
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            leading: const CircleAvatar(
+                              backgroundColor: Colors.green,
+                              child: Icon(Icons.person, color: Colors.white),
+                            ),
+                            title: Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: const Text("Status: Active Member"),
+                            trailing: OutlinedButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ApplicantProfileView(
+                                      application: app,
+                                      showActions: false, // Hide buttons for hired members
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: const Text("Profile"),
+                            ),
+                          );
+                        },
                       ),
                     );
                   },
