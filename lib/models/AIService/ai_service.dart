@@ -9,7 +9,7 @@ class AIService {
 
   AIService() {
     // Ideally use environment variables for keys
-    const apiKey = "-";
+    const apiKey = "-"; // Keep empty as per instructions, injected at runtime
     _model = GenerativeModel(
       model: 'gemini-2.5-flash',
       apiKey: apiKey,
@@ -18,17 +18,32 @@ class AIService {
   }
 
   Future<Project> generateProjectDraft(String resources, String budgetAmount) async {
+    // --- UPDATED PROMPT WITH GUARDRAILS ---
     final prompt = '''
-      You are a senior rural development consultant in Malaysia.
+      You are the official AI Project Planner for "Smart Village Advisor", an app dedicated to rural development in Malaysia.
       
+      YOUR ROLE:
+      Your SOLE purpose is to convert user inputs (Resources & Budget) into a structured JSON project plan. 
+      
+      STRICT GUARDRAILS (CRITICAL):
+      1. DO NOT act as a general chatbot. DO NOT answer general knowledge questions, personal questions, or engage in casual conversation (e.g., "Who are you?", "What is the capital of France?", "Tell me a joke").
+      2. IF the input under "Resources" is unrelated to village development, agriculture, or infrastructure (e.g., gibberish, political questions, or random chat), YOU MUST REFUSE TO ANSWER.
+      3. INSTEAD of answering the question, you MUST generate a valid JSON "Error Project" with:
+         - "project_title": "Invalid Input Detected"
+         - "description": "The input provided was not recognized as a valid resource for a village project. Please strictly input available assets like '2 acres of land', '10 youth volunteers', or 'idle tractors'."
+         - "total_budget": "0"
+         - "milestones": []
+         - "required_skills": []
+      4. ALWAYS output valid JSON. Never output plain text explanations.
+
       INPUTS:
       1. Resources: "$resources"
       2. Total Grant: RM $budgetAmount
       
       TASK:
-      Generate a detailed, professional project plan JSON for a village rejuvenation project.
+      If the inputs are valid resources, generate a detailed, professional project plan JSON for a village rejuvenation project.
       
-      STRICT REQUIREMENTS:
+      REQUIREMENTS FOR VALID PROJECTS:
       1. Milestones: Generate exactly 6 to 8 milestones. 
          - Cover phases: Planning, Site Prep, Infrastructure, Planting/Stocking, Maintenance, and Harvest.
       2. Descriptions: Must be detailed (2-3 sentences). Explain *what* to do and *why*.
@@ -67,11 +82,22 @@ class AIService {
       // Clean up potential markdown formatting if Gemini adds it
       String cleanJson = response.text!.replaceAll('```json', '').replaceAll('```', '');
 
+      // Attempt to parse JSON
       final jsonMap = jsonDecode(cleanJson);
+
       return Project.fromJson(jsonMap);
     } catch (e) {
       print("AI Error: $e");
-      throw Exception("AI Service Error: $e");
+      // Fallback in case of severe parsing error, ensuring the app doesn't crash
+      return Project(
+          title: "AI Generation Error",
+          description: "Could not generate plan. Please try again with clearer inputs. (Error: $e)",
+          timeline: "N/A",
+          skills: [],
+          participantRange: "0",
+          milestones: [],
+          totalBudget: budgetAmount
+      );
     }
   }
 }
