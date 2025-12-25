@@ -1,12 +1,94 @@
-// lib/View/ParticipantViewInterface/participant_my_tasks_page.dart
-
+import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/DatabaseService/database_service.dart';
 import '../../models/ProjectRepository/project_model.dart';
 
+// --- RELIABILITY STRATEGY CLASSES ---
+abstract class ReliabilityStrategy {
+  String get label;
+  Color get primaryColor;
+  Color get backgroundColor;
+  Color get barColor;
+  IconData get icon;
+}
+
+class HighReliabilityStrategy implements ReliabilityStrategy {
+  @override
+  String get label => "High Reliability";
+  @override
+  Color get primaryColor => const Color(0xFF2E7D32);
+  @override
+  Color get backgroundColor => const Color(0xFFE8F5E9);
+  @override
+  Color get barColor => const Color(0xFF43A047);
+  @override
+  IconData get icon => Icons.verified_user;
+}
+
+class MediumReliabilityStrategy implements ReliabilityStrategy {
+  @override
+  String get label => "Medium Reliability";
+  @override
+  Color get primaryColor => const Color(0xFFFFA000);
+  @override
+  Color get backgroundColor => const Color(0xFFFFF8E1);
+  @override
+  Color get barColor => const Color(0xFFFFC107);
+  @override
+  IconData get icon => Icons.star_half;
+}
+
+class LowReliabilityStrategy implements ReliabilityStrategy {
+  @override
+  String get label => "Needs Improvement";
+  @override
+  Color get primaryColor => const Color(0xFFC62828);
+  @override
+  Color get backgroundColor => const Color(0xFFFFEBEE);
+  @override
+  Color get barColor => const Color(0xFFE57373);
+  @override
+  IconData get icon => Icons.warning_amber_rounded;
+}
+
 class ParticipantMyTasksPage extends StatelessWidget {
   const ParticipantMyTasksPage({super.key});
+
+  ReliabilityStrategy _getReliabilityStrategy(int score) {
+    if (score >= 80) return HighReliabilityStrategy();
+    if (score >= 50) return MediumReliabilityStrategy();
+    return LowReliabilityStrategy();
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return "${months[date.month - 1]} ${date.day}, ${date.year}";
+  }
+
+  // Helper to trigger expiration checks
+  void _triggerExpirationChecks(List<Project> projects) {
+    final db = DatabaseService();
+    for (var project in projects) {
+      if (project.id == null) continue;
+      for (int i = 0; i < project.milestones.length; i++) {
+        var m = project.milestones[i];
+        // Only check if it has a due date and is ostensibly open or in progress
+        if (m.submissionDueDate != null && m.isOpen) {
+          if (DateTime.now().isAfter(m.submissionDueDate!)) {
+            // Fire and forget - don't await to avoid blocking UI build
+            db.checkAndMarkExpiredSubmissions(project.id!, i);
+          }
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,35 +107,63 @@ class ParticipantMyTasksPage extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 24),
         child: Column(
           children: [
-            // --- Reliability Score Banner ---
-            Container(
-              margin: const EdgeInsets.all(20),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.star, color: Colors.orange, size: 32),
-                  ),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text("Reliability Score", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text("High (Top 15%)", style: TextStyle(color: Colors.orange[700], fontWeight: FontWeight.bold)),
-                      const Text("Keep up the great work!", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            // --- Reliability Score Banner (REAL-TIME) ---
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+              builder: (context, snapshot) {
+                int score = 100;
+
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  final data = snapshot.data!.data() as Map<String, dynamic>;
+                  score = data['reliability_score'] ?? 100;
+                }
+
+                final strategy = _getReliabilityStrategy(score);
+
+                return Container(
+                  margin: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))
                     ],
-                  )
-                ],
-              ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                            color: strategy.backgroundColor,
+                            borderRadius: BorderRadius.circular(12)
+                        ),
+                        child: Icon(strategy.icon, color: strategy.primaryColor, size: 32),
+                      ),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Reliability Score", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Row(
+                            children: [
+                              Text(
+                                  "$score/100",
+                                  style: TextStyle(color: strategy.primaryColor, fontWeight: FontWeight.bold, fontSize: 14)
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                  strategy.label,
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 12)
+                              ),
+                            ],
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                );
+              },
             ),
 
             // --- Active Projects Stream ---
@@ -78,6 +188,11 @@ class ParticipantMyTasksPage extends StatelessWidget {
                     ),
                   );
                 }
+
+                // Trigger expiration check on load
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _triggerExpirationChecks(snapshot.data!);
+                });
 
                 return ListView.builder(
                   shrinkWrap: true,
@@ -188,7 +303,7 @@ class ParticipantMyTasksPage extends StatelessWidget {
     Color bubbleColor;
     Color lineColor;
     Widget statusWidget;
-    bool isActionable = false;
+    VoidCallback? onTapAction;
 
     // Find my submission
     MilestoneSubmission? mySubmission;
@@ -198,34 +313,68 @@ class ParticipantMyTasksPage extends StatelessWidget {
       mySubmission = null;
     }
 
-    if (mySubmission?.status == 'approved' || m.isCompleted) {
-      bubbleColor = const Color(0xFF2E5B3E); // Dark Green
+    String status = mySubmission?.status ?? 'none';
+
+    // Check if overdue
+    bool isOverdue = false;
+    if (m.submissionDueDate != null && m.isOpen && status != 'approved' && status != 'pending' && DateTime.now().isAfter(m.submissionDueDate!)) {
+      isOverdue = true;
+    }
+
+    // --- STATE LOGIC ---
+
+    if (status == 'approved') {
+      bubbleColor = const Color(0xFF2E5B3E);
       lineColor = const Color(0xFF2E5B3E);
-      statusWidget = Text(
-          m.isCompleted ? "Phase Completed" : "Approved",
-          style: const TextStyle(color: Color(0xFF2E5B3E), fontSize: 12, fontWeight: FontWeight.w500)
+      statusWidget = Row(
+        children: const [
+          Text("Approved", style: TextStyle(color: Color(0xFF2E5B3E), fontSize: 12, fontWeight: FontWeight.bold)),
+          SizedBox(width: 4),
+          Icon(Icons.visibility_outlined, size: 14, color: Colors.grey)
+        ],
       );
-    } else if (mySubmission?.status == 'pending') {
-      bubbleColor = Colors.orange;
-      lineColor = Colors.grey.shade300;
-      statusWidget = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(4)),
-        child: const Text("Pending Review", style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+      onTapAction = () => showDialog(
+        context: context,
+        builder: (_) => SubmissionDetailsDialog(milestone: m, submission: mySubmission!),
       );
-    } else if (mySubmission?.status == 'missed') {
+    }
+    else if (status == 'missed') {
       bubbleColor = Colors.red.shade700;
       lineColor = Colors.grey.shade300;
-      isActionable = false; // Cannot submit after missed
       statusWidget = Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(4)),
-        child: const Text("Missed - No submission before due date", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+        child: const Text("Missed", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
       );
-    } else if (mySubmission?.status == 'rejected') {
+    }
+    else if (m.isCompleted) {
+      if (mySubmission != null) {
+        bubbleColor = Colors.grey;
+        lineColor = Colors.grey.shade300;
+        statusWidget = Row(
+          children: [
+            Text("Phase Ended (${status.toUpperCase()})", style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 4),
+            const Icon(Icons.visibility_outlined, size: 14, color: Colors.blue)
+          ],
+        );
+        onTapAction = () => showDialog(
+          context: context,
+          builder: (_) => SubmissionDetailsDialog(milestone: m, submission: mySubmission!),
+        );
+      } else {
+        bubbleColor = Colors.red.shade300;
+        lineColor = Colors.grey.shade300;
+        statusWidget = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(4)),
+          child: const Text("Missed - Phase Completed", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+        );
+      }
+    }
+    else if (status == 'rejected') {
       bubbleColor = Colors.red;
       lineColor = Colors.grey.shade300;
-      isActionable = m.isOpen; // Can retry if phase is still open
       statusWidget = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -241,37 +390,46 @@ class ParticipantMyTasksPage extends StatelessWidget {
               style: TextStyle(color: Colors.red[700], fontSize: 11),
             ),
           ],
-          if (m.submissionDueDate != null) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.calendar_today, size: 10, color: m.isDueDatePassed ? Colors.red : Colors.orange),
-                const SizedBox(width: 4),
-                Text(
-                  m.isDueDatePassed
-                      ? "OVERDUE - Due: ${_formatDate(m.submissionDueDate!)}"
-                      : "Re-upload before: ${_formatDate(m.submissionDueDate!)}",
-                  style: TextStyle(
-                    color: m.isDueDatePassed ? Colors.red : Colors.orange,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
       );
-    } else if (m.isOpen) {
-      bubbleColor = const Color(0xFF2962FF); // Blue
+      onTapAction = () => showDialog(
+        context: context,
+        builder: (_) => SubmissionDialog(project: project, index: index, mySubmission: mySubmission),
+      );
+    }
+    else if (status == 'pending') {
+      bubbleColor = Colors.orange;
       lineColor = Colors.grey.shade300;
-      isActionable = true;
+      statusWidget = Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(4)),
+            child: const Text("Pending Review", style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.visibility_outlined, size: 14, color: Colors.grey)
+        ],
+      );
+      onTapAction = () => showDialog(
+        context: context,
+        builder: (_) => SubmissionDetailsDialog(milestone: m, submission: mySubmission!),
+      );
+    }
+    else if (m.isOpen) {
+      bubbleColor = const Color(0xFF2962FF);
+      lineColor = Colors.grey.shade300;
       statusWidget = Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(color: const Color(0xFF2E5B3E), borderRadius: BorderRadius.circular(12)),
         child: const Text("Upload Photo Proof", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
       );
-    } else {
+      onTapAction = () => showDialog(
+        context: context,
+        builder: (_) => SubmissionDialog(project: project, index: index),
+      );
+    }
+    else {
       bubbleColor = Colors.grey.shade300;
       lineColor = Colors.grey.shade300;
       statusWidget = const SizedBox();
@@ -279,7 +437,7 @@ class ParticipantMyTasksPage extends StatelessWidget {
 
     return IntrinsicHeight(
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
             width: 40,
@@ -291,7 +449,7 @@ class ParticipantMyTasksPage extends StatelessWidget {
                     color: bubbleColor,
                     shape: BoxShape.circle,
                   ),
-                  child: (mySubmission?.status == 'approved' || m.isCompleted)
+                  child: (status == 'approved')
                       ? const Icon(Icons.check, size: 16, color: Colors.white)
                       : null,
                 ),
@@ -310,18 +468,21 @@ class ParticipantMyTasksPage extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.only(bottom: 24.0),
               child: GestureDetector(
-                onTap: isActionable ? () => _showSubmissionDialog(context, project, index) : null,
+                onTap: onTapAction,
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.grey[100],
                     borderRadius: BorderRadius.circular(12),
-                    border: isActionable ? Border.all(color: bubbleColor.withOpacity(0.5)) : null,
+                    border: (m.isOpen && status != 'approved' && status != 'pending') || (status == 'rejected')
+                        ? Border.all(color: bubbleColor.withOpacity(0.5))
+                        : null,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
                             child: Text(
@@ -333,16 +494,14 @@ class ParticipantMyTasksPage extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (isActionable && mySubmission?.status == 'rejected')
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                "Re-upload",
-                                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          // --- DUE DATE ---
+                          if (m.submissionDueDate != null)
+                            Text(
+                              "Due: ${_formatDate(m.submissionDueDate!)}",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isOverdue ? Colors.red : Colors.grey[600],
                               ),
                             ),
                         ],
@@ -359,162 +518,386 @@ class ParticipantMyTasksPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class SubmissionDetailsDialog extends StatelessWidget {
+  final Milestone milestone;
+  final MilestoneSubmission submission;
+
+  const SubmissionDetailsDialog({super.key, required this.milestone, required this.submission});
 
   String _formatDate(DateTime date) {
-    return "${date.day}/${date.month}/${date.year}";
+    return "${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}";
   }
 
-  void _showSubmissionDialog(BuildContext context, Project project, int index) {
-    final expenseController = TextEditingController();
-    final milestone = project.milestones[index];
-    final user = FirebaseAuth.instance.currentUser;
-    // CRITICAL FIX: Capture Messenger before async gap or context pop
-    final messenger = ScaffoldMessenger.of(context);
+  Widget _buildImage(String imageString) {
+    if (imageString.isEmpty) return const SizedBox.shrink();
 
-    // Check if this is a re-submission
-    MilestoneSubmission? mySubmission;
-    try {
-      mySubmission = milestone.submissions.firstWhere((s) => s.userId == user?.uid);
-    } catch (e) {
-      mySubmission = null;
+    if (imageString.startsWith('http')) {
+      return Image.network(imageString, height: 200, fit: BoxFit.cover);
+    } else {
+      try {
+        Uint8List decodedBytes = base64Decode(imageString);
+        return Image.memory(decodedBytes, height: 200, fit: BoxFit.cover);
+      } catch (e) {
+        return Container(
+          height: 100, color: Colors.grey[200],
+          child: const Center(child: Icon(Icons.broken_image)),
+        );
+      }
     }
-    bool isResubmission = mySubmission?.status == 'rejected';
+  }
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog( // Use ctx for dialog context
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(isResubmission ? "Re-upload: ${milestone.taskName}" : "Submit: ${milestone.taskName}"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isResubmission) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning, color: Colors.orange, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text("Previous submission was rejected", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
-                            if (mySubmission?.rejectionReason != null)
-                              Text("Reason: ${mySubmission!.rejectionReason}", style: const TextStyle(fontSize: 11, color: Colors.orange)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+  @override
+  Widget build(BuildContext context) {
+    Color statusColor = Colors.grey;
+    if (submission.status == 'approved') statusColor = Colors.green;
+    if (submission.status == 'rejected') statusColor = Colors.red;
+    if (submission.status == 'pending') statusColor = Colors.orange;
+
+    return AlertDialog(
+      title: Text("Submission History", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(milestone.taskName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 16),
+
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: statusColor)
                 ),
-                const SizedBox(height: 12),
-              ],
+                child: Text(submission.status.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            const Text("Expense Claimed:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+            Text("RM ${submission.expenseClaimed}", style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 16),
+
+            const Text("Submitted On:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+            Text(_formatDate(submission.submittedAt)),
+            const SizedBox(height: 16),
+
+            const Text("Proof of Work:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: _buildImage(submission.proofImageUrl),
+            ),
+
+            if (submission.rejectionReason != null && submission.rejectionReason!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Divider(),
+              const Text("Feedback / Reason:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+              const SizedBox(height: 4),
+              Text(submission.rejectionReason!, style: const TextStyle(color: Colors.red)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
+      ],
+    );
+  }
+}
+
+class SubmissionDialog extends StatefulWidget {
+  final Project project;
+  final int index;
+  final MilestoneSubmission? mySubmission;
+
+  const SubmissionDialog({
+    super.key,
+    required this.project,
+    required this.index,
+    this.mySubmission,
+  });
+
+  @override
+  State<SubmissionDialog> createState() => _SubmissionDialogState();
+}
+
+class _SubmissionDialogState extends State<SubmissionDialog> {
+  final TextEditingController _expenseController = TextEditingController();
+  File? _imageFile;
+  bool _isUploading = false;
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 600,
+        imageQuality: 50,
+      );
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error picking image: $e")),
+      );
+    }
+  }
+
+  Future<String?> _convertImageToBase64() async {
+    if (_imageFile == null) return null;
+
+    setState(() => _isUploading = true);
+
+    try {
+      final bytes = await _imageFile!.readAsBytes();
+      String base64Image = base64Encode(bytes);
+
+      if (base64Image.length > 900000) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Image too large! Please choose a smaller photo.")),
+          );
+        }
+        return null;
+      }
+
+      return base64Image;
+
+    } catch (e) {
+      if (kDebugMode) print("Conversion Error: $e");
+      return null;
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final milestone = widget.project.milestones[widget.index];
+    final bool isResubmission = widget.mySubmission?.status == 'rejected';
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(isResubmission ? "Re-upload: ${milestone.taskName}" : "Submit: ${milestone.taskName}"),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isResubmission) ...[
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
-                child: Text(
-                  isResubmission
-                      ? "Please upload new proof and expenses. Make sure to address the rejection reason."
-                      : "Upload a clear photo of your work and enter the exact amount spent from the budget.",
-                  style: const TextStyle(fontSize: 12),
+                decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200)
                 ),
-              ),
-              const SizedBox(height: 16),
-              if (milestone.submissionDueDate != null) ...[
-                Row(
+                child: Row(
                   children: [
-                    Icon(
-                      Icons.calendar_today,
-                      size: 14,
-                      color: milestone.isDueDatePassed ? Colors.red : Colors.orange,
-                    ),
-                    const SizedBox(width: 4),
+                    const Icon(Icons.warning, color: Colors.orange, size: 16),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        milestone.isDueDatePassed
-                            ? "OVERDUE - Due: ${_formatDate(milestone.submissionDueDate!)}"
-                            : "Due: ${_formatDate(milestone.submissionDueDate!)}",
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: milestone.isDueDatePassed ? Colors.red : Colors.orange,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Previous submission rejected",
+                              style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
+                          if (widget.mySubmission?.rejectionReason != null)
+                            Text("Reason: ${widget.mySubmission!.rejectionReason}",
+                                style: const TextStyle(fontSize: 11, color: Colors.orange)),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-              ],
-              Text("Budget Limit: RM ${milestone.allocatedBudget}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
               const SizedBox(height: 12),
-              const Text("Proof of Work (Photo)", style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
+            ],
+
+            Text("Budget Limit: RM ${milestone.allocatedBudget}",
+                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(height: 12),
+
+            // --- RESTORED DUE DATE DISPLAY IN DIALOG ---
+            if (milestone.submissionDueDate != null) ...[
               Container(
-                height: 100,
-                width: double.infinity,
-                decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.camera_alt, color: Colors.grey),
-                    Text("Tap to upload", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                        "Due Date: ${_formatDate(milestone.submissionDueDate!)}",
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              const Text("Expenses Incurred (RM)", style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(
-                controller: expenseController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  hintText: "e.g., 50.00",
-                  prefixText: "RM ",
-                  border: OutlineInputBorder(),
+            ],
+
+            const Text("Proof of Work (Photo) *", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  builder: (ctx) => SafeArea(
+                    child: Wrap(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.camera_alt),
+                          title: const Text("Take Photo"),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _pickImage(ImageSource.camera);
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.photo_library),
+                          title: const Text("Choose from Gallery"),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _pickImage(ImageSource.gallery);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                height: 140,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: _imageFile != null
+                    ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(_imageFile!, fit: BoxFit.cover),
+                )
+                    : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.add_a_photo, color: Colors.grey, size: 30),
+                    SizedBox(height: 8),
+                    Text("Tap to upload photo", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
-              if (expenseController.text.isEmpty || user == null) return;
-
-              // 1. Pop Dialog first using the dialog's context (ctx)
-              Navigator.pop(ctx);
-
-              // 2. Use the captured messenger to show SnackBar
-              messenger.showSnackBar(SnackBar(content: Text(isResubmission ? "Re-submitting..." : "Submitting...")));
-
-              try {
-                await DatabaseService().submitMilestone(
-                    project.id!,
-                    index,
-                    user.uid,
-                    user.displayName ?? "Participant",
-                    expenseController.text,
-                    "https://mock.url/photo.jpg"
-                );
-                messenger.showSnackBar(SnackBar(
-                  content: Text(isResubmission ? "Re-submitted successfully!" : "Submitted successfully!"),
-                  backgroundColor: Colors.green,
-                ));
-              } catch (e) {
-                messenger.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isResubmission ? Colors.red : Colors.blue,
             ),
-            child: Text(isResubmission ? "Re-upload" : "Submit for Review"),
-          ),
-        ],
+            const SizedBox(height: 16),
+
+            const Text("Expenses Incurred (RM)", style: TextStyle(fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _expenseController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              ],
+              decoration: const InputDecoration(
+                hintText: "e.g., 50.00",
+                prefixText: "RM ",
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+          ],
+        ),
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        ElevatedButton(
+          onPressed: _isUploading ? null : () async {
+            // 1. Validation: Empty
+            if (_expenseController.text.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter expenses amount")));
+              return;
+            }
+
+            // 2. Validation: Numeric check (Already handled by formatters but double check)
+            double? expense = double.tryParse(_expenseController.text);
+            if (expense == null) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a valid number")));
+              return;
+            }
+
+            // 3. Validation: Budget Limit
+            // Parse allocated budget (handling potential currency symbols or commas if stored that way)
+            // Assuming allocatedBudget is stored as "500" or "500.00" string in Project model.
+            double allocated = double.tryParse(widget.project.milestones[widget.index].allocatedBudget.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+
+            if (expense > allocated) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("Expense cannot exceed allocated budget of RM ${allocated.toStringAsFixed(2)}"),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return; // Stop submission
+            }
+
+            if (_imageFile == null) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please upload a proof photo")));
+              return;
+            }
+
+            final user = FirebaseAuth.instance.currentUser;
+            if (user == null) return;
+
+            String? imageString = await _convertImageToBase64();
+
+            if (imageString == null) {
+              return;
+            }
+
+            try {
+              await DatabaseService().submitMilestone(
+                  widget.project.id!,
+                  widget.index,
+                  user.uid,
+                  user.displayName ?? "Participant",
+                  _expenseController.text,
+                  imageString
+              );
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Submitted successfully!"), backgroundColor: Colors.green),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error submitting data: $e"), backgroundColor: Colors.red));
+                setState(() => _isUploading = false);
+              }
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isResubmission ? Colors.red : Colors.blue,
+          ),
+          child: _isUploading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : Text(isResubmission ? "Re-upload" : "Submit"),
+        ),
+      ],
     );
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return "${months[date.month - 1]} ${date.day}, ${date.year}";
   }
 }

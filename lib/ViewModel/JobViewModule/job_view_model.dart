@@ -21,6 +21,23 @@ class JobViewModel extends ChangeNotifier {
     return _dbService.getActiveProjects();
   }
 
+  // --- NEW: Toggle Saved Job ---
+  Future<void> toggleSavedJob(String projectId, bool isCurrentlySaved) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Toggle logic: If currently saved, we want to unsave (false).
+    // If not saved, we want to save (true).
+    bool shouldSave = !isCurrentlySaved;
+
+    try {
+      await _dbService.toggleProjectSave(user.uid, projectId, shouldSave);
+      // No need to notifyListeners() here if UI listens to user profile stream directly
+    } catch (e) {
+      print("Error toggling saved job: $e");
+    }
+  }
+
   // Action: Apply for Job (Constraint: Max 1)
   Future<bool> applyForJob(Project project) async {
     final user = FirebaseAuth.instance.currentUser;

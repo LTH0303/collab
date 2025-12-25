@@ -12,9 +12,24 @@ class DatabaseService {
 
   // --- USER PROFILE MANAGEMENT ---
 
-  // NEW: Update User Profile (Name, Phone, Location, Skills)
+  // Update User Profile (Name, Phone, Location, Skills)
   Future<void> updateUserProfile(String userId, Map<String, dynamic> data) async {
     await _db.collection('users').doc(userId).update(data);
+  }
+
+  // --- SAVED JOBS MANAGEMENT (NEW) ---
+
+  Future<void> toggleProjectSave(String userId, String projectId, bool shouldSave) async {
+    final userRef = _db.collection('users').doc(userId);
+    if (shouldSave) {
+      await userRef.update({
+        'saved_projects': FieldValue.arrayUnion([projectId])
+      });
+    } else {
+      await userRef.update({
+        'saved_projects': FieldValue.arrayRemove([projectId])
+      });
+    }
   }
 
   // --- SCORE MANAGEMENT ---
@@ -47,43 +62,78 @@ class DatabaseService {
     }
   }
 
+  // --- HELPER: Fetch User Name from Firestore ---
+  Future<String> _fetchUserName(String userId) async {
+    try {
+      final userDoc = await _db.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        final name = userDoc.data()?['name'] as String?;
+        if (name != null && name.isNotEmpty) {
+          return name;
+        }
+      }
+    } catch (e) {
+      print("Error fetching user name for $userId: $e");
+    }
+    return "Unknown Participant";
+  }
+
   // --- HELPER: Remove Duplicate Submissions ---
-  // Ensures only one submission per user exists (keeps the most recent one)
   void _removeDuplicateSubmissions(Milestone milestone) {
     Map<String, MilestoneSubmission> userSubmissions = {};
 
-    // Collect submissions, keeping only the most recent one per user
     for (var submission in milestone.submissions) {
       if (!userSubmissions.containsKey(submission.userId)) {
         userSubmissions[submission.userId] = submission;
       } else {
-        // If duplicate exists, keep the one with later submittedAt date
         MilestoneSubmission existing = userSubmissions[submission.userId]!;
         if (submission.submittedAt.isAfter(existing.submittedAt)) {
           userSubmissions[submission.userId] = submission;
         }
       }
     }
-
-    // Replace submissions list with deduplicated version
     milestone.submissions = userSubmissions.values.toList();
   }
 
   // --- HELPER: Check and Mark Expired Submissions ---
-  // Marks rejected submissions as "missed" if due date has passed
   Future<void> _checkAndMarkExpiredSubmissions(Milestone milestone, List<String> activeParticipants, String projectTitle) async {
     if (milestone.submissionDueDate == null) return;
     if (!DateTime.now().isAfter(milestone.submissionDueDate!)) return;
 
-    // Find rejected submissions that passed due date
+    // Mark rejected submissions as missed
     for (var submission in milestone.submissions) {
       if (submission.status == 'rejected') {
-        // Rejected submission passed due date → auto become Missing
         submission.status = 'missed';
         submission.rejectionReason = "System: Rejected submission not re-uploaded before due date";
-
-        // Deduct reliability score for missing
+        // Update name if it's still unknown or empty
+        if (submission.userName == "Unknown Participant" || submission.userName.isEmpty || submission.userName == "Unknown") {
+          submission.userName = await _fetchUserName(submission.userId);
+        }
         await _updateReliabilityScore(submission.userId, -20, "No Re-upload After Rejection", projectTitle: projectTitle);
+      }
+    }
+
+    // Mark participants without submissions as missed
+    Set<String> submittedUserIds = milestone.submissions.map((s) => s.userId).toSet();
+    for (String participantId in activeParticipants) {
+      if (!submittedUserIds.contains(participantId)) {
+        int existingMissedIndex = milestone.submissions.indexWhere(
+                (s) => s.userId == participantId && s.status == 'missed'
+        );
+
+        if (existingMissedIndex == -1) {
+          final userName = await _fetchUserName(participantId);
+          await _updateReliabilityScore(participantId, -20, "No Show", projectTitle: projectTitle);
+          milestone.submissions.add(MilestoneSubmission(
+            userId: participantId,
+            userName: userName,
+            expenseClaimed: "0",
+            proofImageUrl: "",
+            status: "missed",
+            rejectionReason: "System: No submission before due date",
+            submittedAt: DateTime.now(),
+          ));
+        }
       }
     }
   }
@@ -94,18 +144,17 @@ class DatabaseService {
 
     for (String participantId in activeParticipants) {
       if (!submittedUserIds.contains(participantId)) {
-        // Check if user already has a "missed" submission (shouldn't happen, but safety check)
         int existingMissedIndex = milestone.submissions.indexWhere(
                 (s) => s.userId == participantId && s.status == 'missed'
         );
 
         if (existingMissedIndex == -1) {
-          // -20 for No Show
+          final userName = await _fetchUserName(participantId);
           await _updateReliabilityScore(participantId, -20, "No Show", projectTitle: projectTitle);
 
           milestone.submissions.add(MilestoneSubmission(
             userId: participantId,
-            userName: "Participant (No Show)",
+            userName: userName,
             expenseClaimed: "0",
             proofImageUrl: "",
             status: "missed",
@@ -113,7 +162,6 @@ class DatabaseService {
             submittedAt: DateTime.now(),
           ));
         }
-        // If missed already exists, don't duplicate
       }
     }
   }
@@ -121,8 +169,12 @@ class DatabaseService {
   // --- PROJECT METHODS ---
 
   Future<void> addProject(Project project, String leaderId) async {
-    project.status = 'active';
-    project.createdAt = DateTime.now(); // Set createdAt on project object
+    // UPDATED: Respect the status passed in the project object (default 'draft' if empty)
+    if (project.status.isEmpty) {
+      project.status = 'draft';
+    }
+
+    project.createdAt = DateTime.now();
     for (var m in project.milestones) {
       m.status = 'locked';
     }
@@ -131,6 +183,24 @@ class DatabaseService {
       'leader_id': leaderId,
       'active_participants': [],
     });
+  }
+
+  // NEW: Publish a draft project (update status to 'active')
+  Future<void> publishProjectFromDraft(String projectId) async {
+    await _db.collection('projects').doc(projectId).update({
+      'status': 'active',
+      // We keep original created_at or update it? Keeping original created_at is safer for sorting.
+    });
+  }
+
+  // NEW: Update generic project details (for Edit Page)
+  Future<void> updateProjectDetails(String projectId, Map<String, dynamic> data) async {
+    await _db.collection('projects').doc(projectId).update(data);
+  }
+
+  // NEW: Delete a project (for removing drafts)
+  Future<void> deleteProject(String projectId) async {
+    await _db.collection('projects').doc(projectId).delete();
   }
 
   Future<void> startProject(String projectId) async {
@@ -150,6 +220,7 @@ class DatabaseService {
     }
   }
 
+  // FIXED: unlockNextPhase logic to allow MISSED submissions
   Future<void> unlockNextPhase(String projectId, int currentPhaseIndex) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
     final snapshot = await projectRef.get();
@@ -162,9 +233,26 @@ class DatabaseService {
 
     List<Milestone> milestones = milestonesRaw.map((m) => Milestone.fromJson(m)).toList();
 
-    // Check Penalties
     if (currentPhaseIndex < milestones.length) {
-      await _penalizeNoShows(milestones[currentPhaseIndex], activeParticipants, projectTitle);
+      var milestone = milestones[currentPhaseIndex];
+
+      // 1. Filter latest submissions
+      _removeDuplicateSubmissions(milestone);
+
+      // 2. BLOCK if there are pending submissions
+      if (milestone.submissions.any((s) => s.status == 'pending')) {
+        throw Exception("Cannot unlock next phase: Some submissions are still pending review.");
+      }
+
+      // 3. BLOCK if there are rejected submissions
+      if (milestone.submissions.any((s) => s.status == 'rejected')) {
+        throw Exception("Cannot unlock next phase: Rejected submissions must be resolved (re-uploaded or expired).");
+      }
+
+      // Note: 'missed' and 'approved' are allowed to proceed.
+
+      // 4. Handle penalties for no-shows before closing
+      await _penalizeNoShows(milestone, activeParticipants, projectTitle);
     }
 
     milestones[currentPhaseIndex].status = 'completed';
@@ -193,24 +281,34 @@ class DatabaseService {
     if (milestoneIndex < milestones.length) {
       var milestone = milestones[milestoneIndex];
 
-      // CRITICAL: Clean up any duplicate submissions (ensure only one per user)
       _removeDuplicateSubmissions(milestone);
 
-      // Check for pending submissions
-      if (milestone.submissions.any((s) => s.status == 'pending')) {
-        throw Exception("Cannot complete milestone: Some submissions are still pending.");
+      // Check and mark expired submissions first (if due date has passed)
+      await _checkAndMarkExpiredSubmissions(milestone, activeParticipants, projectTitle);
+
+      // Validate: All participants must have a submission (approved or missed)
+      Set<String> submittedUserIds = milestone.submissions.map((s) => s.userId).toSet();
+      for (String participantId in activeParticipants) {
+        if (!submittedUserIds.contains(participantId)) {
+          throw Exception("Cannot complete milestone: Not all participants have submitted. Missing submission from participant.");
+        }
       }
 
-      // Check for rejected submissions (they need re-upload)
+      // Validate: No pending submissions
+      if (milestone.submissions.any((s) => s.status == 'pending')) {
+        throw Exception("Cannot complete milestone: Some submissions are still pending review.");
+      }
+
+      // Validate: No rejected submissions
       if (milestone.submissions.any((s) => s.status == 'rejected')) {
         throw Exception("Cannot complete milestone: Some submissions are rejected and need re-upload.");
       }
 
-      // Check and mark expired submissions (due date passed)
-      await _checkAndMarkExpiredSubmissions(milestone, activeParticipants, projectTitle);
-
-      // Check Penalties for participants without any submission
-      await _penalizeNoShows(milestone, activeParticipants, projectTitle);
+      // All submissions must be either approved or missed
+      bool allValid = milestone.submissions.every((s) => s.status == 'approved' || s.status == 'missed');
+      if (!allValid) {
+        throw Exception("Cannot complete milestone: Some submissions are in an invalid state.");
+      }
 
       milestone.status = 'completed';
       int nextIndex = milestoneIndex + 1;
@@ -231,7 +329,6 @@ class DatabaseService {
     }
   }
 
-  // ... Queries ...
   Future<int> countLeaderActiveProjects(String leaderId) async {
     final snapshot = await _db.collection('projects')
         .where('leader_id', isEqualTo: leaderId)
@@ -267,10 +364,32 @@ class DatabaseService {
     return snapshot.docs.isNotEmpty;
   }
 
+  // --- NEW: Retrieve Application Object for ID ---
+  Future<Application?> getUserApplicationForProject(String userId, String projectId) async {
+    final snapshot = await _db.collection('applications')
+        .where('applicant_id', isEqualTo: userId)
+        .where('project_id', isEqualTo: projectId)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isNotEmpty) {
+      return Application.fromJson(snapshot.docs.first.data(), docId: snapshot.docs.first.id);
+    }
+    return null;
+  }
+
   Stream<List<Project>> getParticipantActiveProjects(String userId) {
     return _db.collection('projects')
         .where('active_participants', arrayContains: userId)
         .where('status', isEqualTo: 'active')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) => Project.fromJson(doc.data(), docId: doc.id))
+        .toList());
+  }
+
+  Stream<List<Project>> getParticipantAllProjects(String userId) {
+    return _db.collection('projects')
+        .where('active_participants', arrayContains: userId)
         .snapshots()
         .map((snapshot) => snapshot.docs
         .map((doc) => Project.fromJson(doc.data(), docId: doc.id))
@@ -282,10 +401,8 @@ class DatabaseService {
     final snapshot = await projectRef.get();
     if (!snapshot.exists) throw Exception("Project not found");
 
-    // --- NEW: FETCH ACTUAL NAME FROM FIRESTORE TO PREVENT EMPTY STRINGS ---
-    final userDoc = await _db.collection('users').doc(userId).get();
-    final actualName = userDoc.data()?['name'] ?? "Unknown Participant";
-    // --------------------------------------------------------------------
+    // Always fetch the latest name from Firestore to ensure accuracy
+    final actualName = await _fetchUserName(userId);
 
     Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
     List<dynamic> rawMilestones = data['milestones'] ?? [];
@@ -293,12 +410,11 @@ class DatabaseService {
 
     if (milestoneIndex < milestones.length) {
       var milestone = milestones[milestoneIndex];
-
       int existingIndex = milestone.submissions.indexWhere((s) => s.userId == userId);
 
       final submission = MilestoneSubmission(
         userId: userId,
-        userName: actualName, // <--- USE THE FETCHED ACTUAL NAME
+        userName: actualName,
         expenseClaimed: expense,
         proofImageUrl: photoUrl ?? '',
         status: 'pending',
@@ -317,7 +433,6 @@ class DatabaseService {
     }
   }
 
-  // Set or update submission due date for a milestone
   Future<void> setMilestoneDueDate(String projectId, int milestoneIndex, DateTime dueDate) async {
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
     final snapshot = await projectRef.get();
@@ -330,16 +445,12 @@ class DatabaseService {
     if (milestoneIndex < milestones.length) {
       var milestone = milestones[milestoneIndex];
       DateTime? oldDueDate = milestone.submissionDueDate;
-
-      // Update the due date
       milestone.submissionDueDate = dueDate;
 
-      // If the new due date is in the future (hasn't passed yet) and there was an old due date,
-      // remove "missed" submissions that were auto-created due to the old due date passing.
-      // This handles both cases: extending a future due date, or resetting a past due date.
-      if (oldDueDate != null && DateTime.now().isBefore(dueDate)) {
-        // Remove "missed" submissions that were created because the old due date passed
-        // These have the rejection reason "System: No submission before due date"
+      // FIX: Compare both in UTC to avoid timezone issues
+      final nowUtc = DateTime.now().toUtc();
+      final newDueDateUtc = dueDate.toUtc();
+      if (oldDueDate != null && nowUtc.isBefore(newDueDateUtc)) {
         milestone.submissions.removeWhere((submission) {
           return submission.status == 'missed' &&
               submission.rejectionReason == "System: No submission before due date";
@@ -352,11 +463,14 @@ class DatabaseService {
     }
   }
 
-  // Check and auto-mark expired submissions (can be called periodically or when viewing milestone)
   Future<void> checkAndMarkExpiredSubmissions(String projectId, int milestoneIndex) async {
+    print("🔍 checkAndMarkExpiredSubmissions called for project $projectId, milestone $milestoneIndex");
     DocumentReference projectRef = _db.collection('projects').doc(projectId);
     final snapshot = await projectRef.get();
-    if (!snapshot.exists) return;
+    if (!snapshot.exists) {
+      print("❌ Project not found: $projectId");
+      return;
+    }
 
     Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
     String projectTitle = data['project_title'] ?? "Project";
@@ -364,40 +478,78 @@ class DatabaseService {
     List<String> activeParticipants = List<String>.from(data['active_participants'] ?? []);
     List<Milestone> milestones = rawMilestones.map((m) => Milestone.fromJson(m)).toList();
 
+    print("📊 Active participants: ${activeParticipants.length} - ${activeParticipants.join(', ')}");
+
     if (milestoneIndex < milestones.length) {
       var milestone = milestones[milestoneIndex];
 
-      // CRITICAL: Clean up any duplicate submissions first
       _removeDuplicateSubmissions(milestone);
-
       bool updated = false;
 
-      // Check if due date has passed
-      if (milestone.submissionDueDate != null && DateTime.now().isAfter(milestone.submissionDueDate!)) {
+      print("📅 Milestone due date: ${milestone.submissionDueDate} (UTC: ${milestone.submissionDueDate?.toUtc()})");
+      print("⏰ Current time: ${DateTime.now()} (UTC: ${DateTime.now().toUtc()})");
+      print("📝 Current submissions: ${milestone.submissions.length}");
+      for (var sub in milestone.submissions) {
+        print("   - ${sub.userId}: ${sub.status}");
+      }
+
+      // FIX: Compare both in UTC to avoid timezone issues
+      // The due date from Firestore is stored as UTC (via toIso8601String())
+      // DateTime.now() is local time, so we convert both to UTC for accurate comparison
+      final nowUtc = DateTime.now().toUtc();
+      final dueDateUtc = milestone.submissionDueDate?.toUtc();
+
+      if (milestone.submissionDueDate != null && dueDateUtc != null && nowUtc.isAfter(dueDateUtc)) {
+        print("✅ Due date HAS PASSED - checking for missing submissions");
+
+        // First, refresh names for any existing submissions with unknown/empty names
+        for (var submission in milestone.submissions) {
+          if (submission.userName == "Unknown Participant" ||
+              submission.userName.isEmpty ||
+              submission.userName == "Unknown" ||
+              submission.userName == "Participant (No Show)") {
+            submission.userName = await _fetchUserName(submission.userId);
+            updated = true;
+            print("   🔄 Refreshed name for ${submission.userId}: ${submission.userName}");
+          }
+        }
+
         // Mark rejected submissions as missed
         for (var submission in milestone.submissions) {
           if (submission.status == 'rejected') {
+            print("   🔄 Marking rejected submission as missed: ${submission.userId}");
             submission.status = 'missed';
             submission.rejectionReason = "System: Rejected submission not re-uploaded before due date";
+            // Ensure name is correct
+            if (submission.userName == "Unknown Participant" || submission.userName.isEmpty || submission.userName == "Unknown") {
+              submission.userName = await _fetchUserName(submission.userId);
+            }
             await _updateReliabilityScore(submission.userId, -20, "No Re-upload After Rejection", projectTitle: projectTitle);
             updated = true;
           }
         }
 
-        // Mark participants without any submission as missed
+        // Mark participants without submissions as missed
         Set<String> submittedUserIds = milestone.submissions.map((s) => s.userId).toSet();
+        print("📋 Participants who submitted: ${submittedUserIds.join(', ')}");
+
         for (String participantId in activeParticipants) {
           if (!submittedUserIds.contains(participantId)) {
-            // Check if user already has a "missed" submission (prevent duplicates)
             int existingMissedIndex = milestone.submissions.indexWhere(
                     (s) => s.userId == participantId && s.status == 'missed'
             );
 
             if (existingMissedIndex == -1) {
+              print("   ⚠️ Missing submission for participant: $participantId - creating missed submission");
+
+              // Fetch actual user name from Firestore using helper
+              final userName = await _fetchUserName(participantId);
+              print("   👤 Fetched user name: $userName");
+
               await _updateReliabilityScore(participantId, -20, "No Show", projectTitle: projectTitle);
               milestone.submissions.add(MilestoneSubmission(
                 userId: participantId,
-                userName: "Participant (No Show)",
+                userName: userName,
                 expenseClaimed: "0",
                 proofImageUrl: "",
                 status: "missed",
@@ -405,17 +557,33 @@ class DatabaseService {
                 submittedAt: DateTime.now(),
               ));
               updated = true;
+              print("   ✅ Created missed submission for $participantId");
+            } else {
+              print("   ℹ️ Participant $participantId already has a missed submission");
             }
-            // If missed already exists, don't duplicate
           }
         }
 
         if (updated) {
+          print("💾 Saving to Firestore...");
           await projectRef.update({
             'milestones': milestones.map((m) => m.toJson()).toList()
           });
+          print("✅ SUCCESS: Updated Firestore with missing submissions for milestone $milestoneIndex");
+          print("📊 Total submissions now: ${milestone.submissions.length}");
+        } else {
+          print("ℹ️ No updates needed for milestone $milestoneIndex (all participants already have submissions)");
+        }
+      } else {
+        if (milestone.submissionDueDate == null) {
+          print("ℹ️ No due date set for milestone $milestoneIndex");
+        } else {
+          print("ℹ️ Due date not passed yet for milestone $milestoneIndex");
+          print("   Due (UTC): $dueDateUtc, Now (UTC): $nowUtc");
         }
       }
+    } else {
+      print("❌ Invalid milestone index: $milestoneIndex (total milestones: ${milestones.length})");
     }
   }
 
@@ -433,10 +601,7 @@ class DatabaseService {
     if (milestoneIndex < milestones.length) {
       var milestone = milestones[milestoneIndex];
 
-      // CRITICAL: Clean up any duplicate submissions first
       _removeDuplicateSubmissions(milestone);
-
-      // Find the user's submission (should only be one due to cleanup above)
       int subIndex = milestone.submissions.indexWhere((s) => s.userId == submissionUserId && s.status == 'pending');
 
       if (subIndex != -1) {
@@ -444,12 +609,17 @@ class DatabaseService {
         if (!isApproved) {
           milestone.submissions[subIndex].rejectionReason = rejectionReason;
         }
+        // Update name if it's unknown or empty
+        if (milestone.submissions[subIndex].userName == "Unknown Participant" ||
+            milestone.submissions[subIndex].userName.isEmpty ||
+            milestone.submissions[subIndex].userName == "Unknown") {
+          milestone.submissions[subIndex].userName = await _fetchUserName(submissionUserId);
+        }
 
         await projectRef.update({
           'milestones': milestones.map((m) => m.toJson()).toList()
         });
 
-        // Update Score
         if (isApproved) {
           await _updateReliabilityScore(submissionUserId, 10, "Verified Success", projectTitle: projectTitle);
         } else {
@@ -473,21 +643,23 @@ class DatabaseService {
     if (milestoneIndex < milestones.length) {
       var milestone = milestones[milestoneIndex];
 
-      // CRITICAL: Clean up any duplicate submissions first
       _removeDuplicateSubmissions(milestone);
-
-      // Find the user's submission (should only be one due to cleanup above)
       int subIndex = milestone.submissions.indexWhere((s) => s.userId == userId && s.status == 'pending');
 
       if (subIndex != -1) {
         milestone.submissions[subIndex].status = 'missed';
         milestone.submissions[subIndex].rejectionReason = 'Submission marked as missed';
+        // Update name if it's unknown or empty
+        if (milestone.submissions[subIndex].userName == "Unknown Participant" ||
+            milestone.submissions[subIndex].userName.isEmpty ||
+            milestone.submissions[subIndex].userName == "Unknown") {
+          milestone.submissions[subIndex].userName = await _fetchUserName(userId);
+        }
 
         await projectRef.update({
           'milestones': milestones.map((m) => m.toJson()).toList()
         });
 
-        // Update Score
         await _updateReliabilityScore(userId, -20, "No Show", projectTitle: projectTitle);
       }
     }
@@ -622,7 +794,6 @@ class DatabaseService {
     });
   }
 
-  // Stream all projects for a leader (any status)
   Stream<List<Project>> streamLeaderAllProjects(String leaderId) {
     return _db
         .collection('projects')
@@ -633,7 +804,6 @@ class DatabaseService {
         .toList());
   }
 
-  // --- IMPACT / POPULATION HELPERS ---
   Future<void> updateProjectPopulation(String projectId, {int? initialPopulation, int? currentPopulation}) async {
     final Map<String, dynamic> data = {};
     if (initialPopulation != null) {

@@ -1,10 +1,13 @@
 // lib/View/LeaderUserInterface/project_details_page.dart
 
+import 'dart:convert'; // Added for Base64 Decoding
+import 'dart:typed_data'; // Added for Uint8List
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../ViewModel/ProjectDetailsViewModel/project_details_view_model.dart';
 import '../../models/ProjectRepository/project_model.dart';
-import 'hired_youth_list_view.dart'; // Import HiredYouthListView
+import 'hired_youth_list_view.dart';
 import 'completed_project_page.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
@@ -24,10 +27,40 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       final viewModel = Provider.of<ProjectDetailsViewModel>(context, listen: false);
       if (widget.project.id != null) {
         viewModel.listenToProject(widget.project.id!);
+        // Auto-check expired submissions for open milestone when page loads
+        _autoCheckExpiredSubmissions(viewModel, widget.project);
       } else {
         viewModel.setProject(widget.project);
       }
     });
+  }
+
+  // Auto-check expired submissions for the current open milestone
+  // This should be called whenever we need to check (page load, viewing submissions, etc.)
+  void _autoCheckExpiredSubmissions(ProjectDetailsViewModel viewModel, Project project) async {
+    if (project.id == null) return;
+
+    print("🔍 _autoCheckExpiredSubmissions called for project ${project.id}");
+
+    // Find the first (and only) open milestone
+    for (int i = 0; i < project.milestones.length; i++) {
+      final milestone = project.milestones[i];
+      if (milestone.isOpen && milestone.submissionDueDate != null) {
+        // Always check if due date has passed using UTC comparison
+        final nowUtc = DateTime.now().toUtc();
+        final dueDateUtc = milestone.submissionDueDate!.toUtc();
+
+        print("   Milestone $i: Due date (UTC) = $dueDateUtc, Now (UTC) = $nowUtc");
+
+        if (nowUtc.isAfter(dueDateUtc)) {
+          print("🔄 Due date PASSED - Auto-checking expired submissions for milestone $i");
+          await viewModel.checkExpiredSubmissions(project.id!, i);
+          break; // Only one milestone can be open at a time
+        } else {
+          print("   ⏰ Due date NOT passed yet (${dueDateUtc.difference(nowUtc).inMinutes} minutes remaining)");
+        }
+      }
+    }
   }
 
   @override
@@ -45,7 +78,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           widget.project.title,
           style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
-        // --- ADDED: Hired Team Button ---
         actions: [
           IconButton(
             icon: const Icon(Icons.people_alt_outlined, color: Colors.black),
@@ -77,6 +109,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           }
 
           final project = viewModel.project ?? widget.project;
+
           return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 900),
@@ -220,7 +253,9 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       isEnabled = false;
     }
 
-    int submissionCount = milestone.submissions.length;
+    // Count only actual submissions (exclude "missed" ones that are auto-generated)
+    int submissionCount = milestone.submissions.where((s) => s.status != 'missed').length;
+    int expectedCount = project.activeParticipants.length;
     bool hasPending = milestone.hasPendingReviews;
 
     return Container(
@@ -248,27 +283,47 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             children: [
               GestureDetector(
                 onTap: isEnabled
-                    ? () {
-                  if (milestone.canBeCompleted) {
-                    _showCompleteMilestoneDialog(viewModel, project.id!, index);
-                  } else {
-                    String message = "Cannot complete milestone: ";
-                    if (milestone.submissions.isEmpty) {
-                      message += "No submissions received yet.";
-                    } else if (milestone.pendingSubmissionsCount > 0) {
-                      message += "${milestone.pendingSubmissionsCount} submission(s) still pending review.";
-                    } else if (milestone.rejectedSubmissionsCount > 0) {
-                      message += "${milestone.rejectedSubmissionsCount} submission(s) rejected and need re-upload.";
+                    ? () async {
+                  // First, check and mark expired submissions if due date has passed
+                  if (project.id != null && milestone.isOpen) {
+                    await viewModel.checkExpiredSubmissions(project.id!, index);
+                    // Refresh project data after checking
+                    final updatedProject = viewModel.project ?? project;
+                    final updatedMilestone = updatedProject.milestones[index];
+
+                    // Check if all participants have submitted (approved or missed)
+                    Set<String> submittedUserIds = updatedMilestone.submissions.map((s) => s.userId).toSet();
+                    List<String> missingParticipants = updatedProject.activeParticipants
+                        .where((pid) => !submittedUserIds.contains(pid))
+                        .toList();
+
+                    // All participants must have a submission (approved or missed)
+                    // No pending or rejected submissions allowed
+                    if (missingParticipants.isEmpty &&
+                        updatedMilestone.pendingSubmissionsCount == 0 &&
+                        updatedMilestone.rejectedSubmissionsCount == 0 &&
+                        updatedMilestone.submissions.isNotEmpty) {
+                      _showCompleteMilestoneDialog(viewModel, project.id!, index);
+                    } else {
+                      String message = "Cannot complete milestone: ";
+                      if (missingParticipants.isNotEmpty) {
+                        message += "Not all participants have submitted. ${missingParticipants.length} participant(s) missing.";
+                      } else if (updatedMilestone.submissions.isEmpty) {
+                        message += "No submissions received yet.";
+                      } else if (updatedMilestone.pendingSubmissionsCount > 0) {
+                        message += "${updatedMilestone.pendingSubmissionsCount} submission(s) still pending review.";
+                      } else if (updatedMilestone.rejectedSubmissionsCount > 0) {
+                        message += "${updatedMilestone.rejectedSubmissionsCount} submission(s) rejected and need re-upload.";
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(message), backgroundColor: Colors.orange),
+                      );
                     }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(message), backgroundColor: Colors.orange),
-                    );
                   }
                 }
                     : null,
                 child: Icon(
                   icon,
-                  // Keep completed milestones green even though they are disabled
                   color: milestone.isCompleted
                       ? iconColor
                       : (isEnabled ? iconColor : Colors.grey.shade400),
@@ -359,17 +414,27 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           if (milestone.isOpen || milestone.isCompleted) ...[
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              onPressed: () {
-                // Check expired submissions before showing dialog
-                if (project.id != null && milestone.isOpen) {
-                  viewModel.checkExpiredSubmissions(project.id!, index);
+              onPressed: () async {
+                if (project.id != null) {
+                  // CRITICAL: Always check expired submissions before showing dialog
+                  // This ensures missing submissions are created if due date has passed
+                  print("🔍 View Submissions clicked - checking expired submissions first");
+                  await viewModel.checkExpiredSubmissions(project.id!, index);
+                  // Get fresh project data after check
+                  final updatedProject = viewModel.project ?? project;
+                  if (updatedProject.milestones.length > index) {
+                    _showSubmissionsDialog(viewModel, updatedProject, index, updatedProject.milestones[index]);
+                  } else {
+                    _showSubmissionsDialog(viewModel, project, index, milestone);
+                  }
+                } else {
+                  _showSubmissionsDialog(viewModel, project, index, milestone);
                 }
-                _showSubmissionsDialog(viewModel, project, index, milestone);
               },
               icon: const Icon(Icons.rate_review, size: 16),
               label: Text(hasPending
                   ? "Review (${milestone.pendingSubmissionsCount} pending)"
-                  : "View Submissions ($submissionCount)"),
+                  : "View Submissions ($submissionCount/$expectedCount)"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: hasPending ? Colors.orange : Colors.blue,
                 foregroundColor: Colors.white,
@@ -490,7 +555,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             onPressed: canGenerateImpact
                 ? () async {
               if (project.id == null) return;
-              // Mark project completed, then navigate to the completed dashboard
               await viewModel.finalizeProject(project.id!);
               final nextProject = viewModel.project ?? project;
 
@@ -568,7 +632,68 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  void _showSubmissionsDialog(ProjectDetailsViewModel viewModel, Project project, int milestoneIndex, Milestone milestone) {
+  void _showSubmissionsDialog(ProjectDetailsViewModel viewModel, Project project, int milestoneIndex, Milestone milestone) async {
+    // CRITICAL: Ensure ALL participants are shown, even if they don't have submissions in Firestore
+    // This handles cases where old completed milestones were completed before the auto-missing feature was added
+    final allSubmissions = List<MilestoneSubmission>.from(milestone.submissions);
+    final expectedParticipants = project.activeParticipants;
+    final submittedUserIds = allSubmissions.map((s) => s.userId).toSet();
+
+    print("📋 _showSubmissionsDialog: Expected ${expectedParticipants.length} participants, Found ${allSubmissions.length} submissions");
+    print("   Expected participants: $expectedParticipants");
+    print("   Submitted user IDs: $submittedUserIds");
+
+    // For each participant who doesn't have a submission, create a placeholder "missed" submission for display
+    for (String participantId in expectedParticipants) {
+      if (!submittedUserIds.contains(participantId)) {
+        print("   ➕ Creating placeholder for missing participant: $participantId");
+        // Fetch the actual user name from Firestore
+        String userName = "Unknown Participant";
+        try {
+          final userDoc = await FirebaseFirestore.instance.collection('users').doc(participantId).get();
+          if (userDoc.exists) {
+            userName = userDoc.data()?['name'] ?? "Unknown Participant";
+            print("   ✅ Fetched name: $userName");
+          } else {
+            print("   ⚠️ User document not found for $participantId");
+          }
+        } catch (e) {
+          print("   ❌ Error fetching user name for display: $e");
+        }
+
+        // Create a placeholder "missed" submission for display only (not saved to Firestore)
+        allSubmissions.add(MilestoneSubmission(
+          userId: participantId,
+          userName: userName,
+          expenseClaimed: "0",
+          proofImageUrl: "",
+          status: "missed",
+          rejectionReason: milestone.isCompleted
+              ? "System: No submission recorded (historical data)"
+              : "System: No submission before due date",
+          submittedAt: DateTime.now(),
+        ));
+      }
+    }
+
+    print("📊 Final submission count: ${allSubmissions.length} (should be ${expectedParticipants.length})");
+
+    // Sort submissions: approved first, then by participant order
+    allSubmissions.sort((a, b) {
+      // Approved submissions first
+      bool aIsApproved = a.status == 'approved';
+      bool bIsApproved = b.status == 'approved';
+      if (aIsApproved && !bIsApproved) return -1;
+      if (!aIsApproved && bIsApproved) return 1;
+
+      // Then sort by participant order
+      int indexA = expectedParticipants.indexOf(a.userId);
+      int indexB = expectedParticipants.indexOf(b.userId);
+      if (indexA == -1) indexA = 999; // Put unknown participants at the end
+      if (indexB == -1) indexB = 999;
+      return indexA.compareTo(indexB);
+    });
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -582,12 +707,73 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Text("Submissions Review", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Submissions Review", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                if (milestone.isCompleted)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      "Completed",
+                      style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Summary showing total participants
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: allSubmissions.length >= expectedParticipants.length
+                    ? Colors.green.shade50
+                    : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: allSubmissions.length >= expectedParticipants.length
+                      ? Colors.green.shade200
+                      : Colors.orange.shade200,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    allSubmissions.length >= expectedParticipants.length
+                        ? Icons.check_circle
+                        : Icons.warning,
+                    size: 16,
+                    color: allSubmissions.length >= expectedParticipants.length
+                        ? Colors.green.shade700
+                        : Colors.orange.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Showing ${allSubmissions.length} / ${expectedParticipants.length} participants",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: allSubmissions.length >= expectedParticipants.length
+                          ? Colors.green.shade700
+                          : Colors.orange.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 20),
             Expanded(
-              child: ListView(
-                children: milestone.submissions.map((submission) {
-                  return _buildSubmissionCard(viewModel, project.id!, milestoneIndex, submission);
+              child: allSubmissions.isEmpty
+                  ? const Center(child: Text("No submissions yet"))
+                  : ListView(
+                children: allSubmissions.map((submission) {
+                  return _buildSubmissionCard(viewModel, project.id!, milestoneIndex, submission, milestone.isCompleted);
                 }).toList(),
               ),
             ),
@@ -597,7 +783,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  Widget _buildSubmissionCard(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, MilestoneSubmission submission) {
+  Widget _buildSubmissionCard(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, MilestoneSubmission submission, bool isMilestoneCompleted) {
     Color statusColor;
     IconData statusIcon;
 
@@ -614,10 +800,18 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         statusColor = Colors.red;
         statusIcon = Icons.cancel;
         break;
+      case 'missed':
+        statusColor = Colors.red;
+        statusIcon = Icons.error_outline;
+        break;
       default:
         statusColor = Colors.grey;
         statusIcon = Icons.help_outline;
     }
+
+    final bool hasImage = submission.proofImageUrl.isNotEmpty &&
+        submission.proofImageUrl != "https://mock.url/photo.jpg" &&
+        submission.proofImageUrl != "https://via.placeholder.com/150";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -649,22 +843,61 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   ],
                 ),
               ),
-              Text("RM ${submission.expenseClaimed}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+              Text(
+                "RM ${submission.expenseClaimed}",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: submission.status == 'missed' ? Colors.red : Colors.green,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            height: 120,
-            width: double.infinity,
-            decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-            child: const Center(child: Text("Photo Proof Placeholder", style: TextStyle(color: Colors.grey))),
+
+          // --- CHANGED: IMAGE DISPLAY LOGIC TO SUPPORT BASE64 ---
+          GestureDetector(
+            onTap: hasImage ? () => _showFullImage(context, submission.proofImageUrl) : null,
+            child: Container(
+              height: 180,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: hasImage
+                  ? ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: _buildImageWidget(submission.proofImageUrl),
+              )
+                  : const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.image_not_supported, color: Colors.grey),
+                    Text("No Photo Uploaded", style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ),
           ),
-          if (submission.rejectionReason != null)
+          // ----------------------------------------------------
+
+          // Show rejection reason for:
+          // 1. Rejected submissions
+          // 2. Missed submissions that were previously rejected (have rejectionReason)
+          if (submission.rejectionReason != null &&
+              (submission.status == 'rejected' ||
+                  (submission.status == 'missed' && submission.rejectionReason!.contains("Rejected"))))
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
-              child: Text("Reason: ${submission.rejectionReason}", style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
+              child: Text(
+                "Reason: ${submission.rejectionReason}",
+                style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+              ),
             ),
-          if (submission.status == 'pending') ...[
+          // Show action buttons only if milestone is not completed and submission is pending
+          if (!isMilestoneCompleted && submission.status == 'pending') ...[
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -687,6 +920,56 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       ),
     );
   }
+
+  // --- NEW HELPER: DECIDE WHETHER TO USE NETWORK OR MEMORY (BASE64) ---
+  Widget _buildImageWidget(String imageString) {
+    if (imageString.startsWith('http')) {
+      return Image.network(
+        imageString,
+        fit: BoxFit.cover,
+        errorBuilder: (ctx, _, __) => const Center(child: Icon(Icons.broken_image)),
+      );
+    } else {
+      try {
+        Uint8List decodedBytes = base64Decode(imageString);
+        return Image.memory(
+          decodedBytes,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, _, __) => const Center(child: Icon(Icons.broken_image)),
+        );
+      } catch (e) {
+        return const Center(child: Text("Invalid Image Data"));
+      }
+    }
+  }
+
+  void _showFullImage(BuildContext context, String imageString) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              children: [
+                // Re-use helper for full screen logic
+                _buildImageWidget(imageString),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                )
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+// ... rest of the file (approve/reject dialogs) remains same ...
 
   void _showApproveDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final commentController = TextEditingController();
@@ -757,7 +1040,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     showDialog(
       context: context,
       builder: (ctx) {
-        // Use a StatefulWidget to properly manage state
         return _DueDatePickerDialog(
           initialDate: initialDate,
           onDateSelected: (selectedDate) async {
@@ -776,7 +1058,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   }
 }
 
-// Separate StatefulWidget for the date picker dialog
 class _DueDatePickerDialog extends StatefulWidget {
   final DateTime initialDate;
   final Function(DateTime) onDateSelected;
@@ -857,6 +1138,4 @@ class _DueDatePickerDialogState extends State<_DueDatePickerDialog> {
       ],
     );
   }
-
-
 }
