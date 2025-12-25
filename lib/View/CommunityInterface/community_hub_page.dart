@@ -249,7 +249,7 @@ class _CommunityHubPageState extends State<CommunityHubPage> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
-                    child: _buildProjectOfTheMonthBanner(),
+
                   ),
                 ),
 
@@ -303,43 +303,6 @@ class _CommunityHubPageState extends State<CommunityHubPage> {
     );
   }
 
-  Widget _buildProjectOfTheMonthBanner() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFFFFA726), Color(0xFFFF7043)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.emoji_events, color: Colors.white, size: 24)),
-            const SizedBox(width: 12),
-            const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("Village Project of the Month", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)), Text("Celebrating our community success", style: TextStyle(color: Colors.white70, fontSize: 12))])
-          ]),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text("Community Hall Renovation", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text("Kampung Baru transformed their 50-year-old hall into a modern community space", style: TextStyle(color: Colors.white, fontSize: 13, height: 1.4)),
-              const SizedBox(height: 12),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [
-                _BannerStat(icon: Icons.people, text: "12 Youth"),
-                _BannerStat(icon: Icons.monetization_on, text: "RM 15,000"),
-                _BannerStat(icon: Icons.access_time, text: "3 Weeks"),
-              ])
-            ]),
-          )
-        ],
-      ),
-    );
-  }
 }
 
 class _BannerStat extends StatelessWidget {
