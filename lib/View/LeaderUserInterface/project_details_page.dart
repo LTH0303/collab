@@ -517,20 +517,20 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   Widget _buildProjectActions(ProjectDetailsViewModel viewModel, Project project) {
     final bool allMilestonesDone = viewModel.isProjectCompleted;
     final bool isStatusCompleted = project.status == 'completed';
-    final bool canGenerateImpact = allMilestonesDone && !isStatusCompleted;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("Project Actions", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-
-        // Only show "Generate Final Impact" button when all milestones are done but project is still active
-        if (canGenerateImpact)
+    // For active projects: Only show "Generate Final Impact" button
+    // Disabled until all milestones are completed
+    if (!isStatusCompleted) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Project Actions", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () async {
+              onPressed: allMilestonesDone
+                  ? () async {
                 if (project.id == null) return;
                 await viewModel.finalizeProject(project.id!);
 
@@ -555,24 +555,31 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                     ),
                   );
                 }
-              },
+              }
+                  : null,
               icon: const Icon(Icons.assessment),
               label: const Text("Generate Final Impact"),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2E7D32),
-                foregroundColor: Colors.white,
+                backgroundColor: allMilestonesDone ? const Color(0xFF2E7D32) : Colors.grey.shade300,
+                foregroundColor: allMilestonesDone ? Colors.white : Colors.grey.shade600,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
           ),
+        ],
+      );
+    }
 
-        // "Recommend Next Project" button - always visible but disabled when not completed
-        const SizedBox(height: 12),
+    // For completed projects: Show "Generate Next Project" button
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Project Actions", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: isStatusCompleted
-                ? () {
+            onPressed: () {
               // Navigate to AI Planner with project outcomes as resources
               // Defensive check: ensure actualOutcomes and expectedOutcomes exist
               final actualOutcomes = project.actualOutcomes ?? <String>[];
@@ -590,17 +597,16 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   builder: (_) => LeaderMainLayoutWithData(
                     initialTab: 0, // AI Planner tab
                     prefillResources: resources,
-                    prefillBudget: project.totalBudget,
+                    // Don't pre-fill budget, leave it empty
                   ),
                 ),
               );
-            }
-                : null,
+            },
             icon: const Icon(Icons.lightbulb_outline),
-            label: const Text("Recommend Next Project"),
+            label: const Text("Generate Next Project"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isStatusCompleted ? const Color(0xFF2E7D32) : Colors.grey.shade300,
-              foregroundColor: isStatusCompleted ? Colors.white : Colors.grey.shade600,
+              backgroundColor: const Color(0xFF2E7D32),
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),
@@ -632,7 +638,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             onPressed: () async {
               Navigator.pop(ctx);
               await viewModel.completeMilestone(projectId, milestoneIndex);
-              messenger.showSnackBar(const SnackBar(content: Text("Milestone completed!"), backgroundColor: Colors.green));
+              messenger.showSnackBar(const SnackBar(content: Text("Milestone completed! Incentives unlocked 🎉"), backgroundColor: Colors.green));
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text("Complete"),
@@ -1414,6 +1420,12 @@ class _DueDatePickerDialogState extends State<_DueDatePickerDialog> {
                 }
               }
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade50,
+              foregroundColor: Colors.blue.shade900,
+              elevation: 2,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
             child: Text("Select: ${_formatDate(selectedDate)} ${selectedDate.hour.toString().padLeft(2, '0')}:${selectedDate.minute.toString().padLeft(2, '0')}"),
           ),
         ],
@@ -1427,8 +1439,13 @@ class _DueDatePickerDialogState extends State<_DueDatePickerDialog> {
           onPressed: () {
             widget.onDateSelected(selectedDate);
           },
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
-          child: const Text("Set Due Date"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue.shade700,
+            foregroundColor: Colors.white,
+            elevation: 3,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+          child: const Text("Set Due Date", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
     );

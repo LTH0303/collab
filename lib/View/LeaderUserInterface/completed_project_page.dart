@@ -404,7 +404,7 @@ class _CompletedProjectDashboardContentState extends State<CompletedProjectDashb
                 builder: (_) => LeaderMainLayoutWithData(
                   initialTab: 0,
                   prefillResources: resources,
-                  prefillBudget: project.totalBudget,
+                  // Don't pre-fill budget, leave it empty
                 ),
               ),
             );
@@ -423,34 +423,94 @@ class _CompletedProjectDashboardContentState extends State<CompletedProjectDashb
   void _showPopulationDialog(BuildContext context, CompletedProjectDashboardViewModel viewModel) {
     final initialController = TextEditingController(text: viewModel.initialPopulation?.toString() ?? '');
     final currentController = TextEditingController(text: viewModel.currentPopulation?.toString() ?? '');
+    final maxGrowth = viewModel.youthParticipated;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Update Population"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-                controller: initialController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: "Initial Population")),
-            TextField(
-                controller: currentController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: "Current Population")),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-          ElevatedButton(
-              onPressed: () async {
-                await viewModel.savePopulation(viewModel.project.id!,
-                    newInitialPopulation: int.tryParse(initialController.text),
-                    newCurrentPopulation: int.tryParse(currentController.text));
-                Navigator.pop(ctx);
-              },
-              child: const Text("Save")),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) {
+          String? errorMessage;
+
+          // Helper function to validate and show error
+          void validateAndShowError() {
+            final initial = int.tryParse(initialController.text);
+            final current = int.tryParse(currentController.text);
+
+            if (initial != null && current != null) {
+              final growth = current - initial;
+              if (growth > maxGrowth) {
+                setState(() {
+                  errorMessage = "Community growth ($growth) cannot exceed youth participants ($maxGrowth)";
+                });
+              } else {
+                setState(() {
+                  errorMessage = null;
+                });
+              }
+            } else {
+              setState(() {
+                errorMessage = null;
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text("Update Population"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Note: Community growth (Current - Initial) must not exceed $maxGrowth (number of youth participants)",
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: initialController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: "Initial Population"),
+                  onChanged: (_) => validateAndShowError(),
+                ),
+                TextField(
+                  controller: currentController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: "Current Population"),
+                  onChanged: (_) => validateAndShowError(),
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    errorMessage!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+              ElevatedButton(
+                  onPressed: errorMessage != null ? null : () async {
+                    try {
+                      await viewModel.savePopulation(viewModel.project.id!,
+                          newInitialPopulation: int.tryParse(initialController.text),
+                          newCurrentPopulation: int.tryParse(currentController.text));
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Population updated successfully"), backgroundColor: Colors.green),
+                        );
+                      }
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text("Save")),
+            ],
+          );
+        },
       ),
     );
   }

@@ -204,7 +204,26 @@ class ImpactOverviewPage extends StatelessWidget {
     required double percent,
     required Color color,
   }) {
-    final displayPercent = percent.clamp(0.0, 100.0);
+    // For community growth, show actual percentage (can be negative or >100%)
+    // But cap progress bar at 100%
+    final isCommunityGrowth = label.contains("Community Growth");
+    final displayPercent = isCommunityGrowth ? percent : percent.clamp(0.0, 100.0);
+    final progressBarValue = (displayPercent / 100).clamp(0.0, 1.0); // Cap progress bar at 100%
+
+    // Format percentage with sign for community growth
+    String percentText;
+    if (isCommunityGrowth) {
+      if (displayPercent > 0) {
+        percentText = "+${displayPercent.toStringAsFixed(0)}%";
+      } else if (displayPercent < 0) {
+        percentText = "${displayPercent.toStringAsFixed(0)}%"; // Negative sign is automatic
+      } else {
+        percentText = "0%";
+      }
+    } else {
+      percentText = "${displayPercent.toStringAsFixed(0)}%";
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -222,7 +241,7 @@ class ImpactOverviewPage extends StatelessWidget {
               ),
             ),
             Text(
-              "${displayPercent.toStringAsFixed(0)}%",
+              percentText,
               style: TextStyle(
                 fontSize: 15,
                 color: color,
@@ -235,7 +254,7 @@ class ImpactOverviewPage extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: LinearProgressIndicator(
-            value: displayPercent / 100,
+            value: progressBarValue,
             minHeight: 10, // Thicker progress bar for better visibility
             backgroundColor: color.withOpacity(0.1),
             valueColor: AlwaysStoppedAnimation<Color>(color),

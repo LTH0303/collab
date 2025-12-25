@@ -13,6 +13,7 @@ class ImpactOverviewViewModel extends ChangeNotifier {
   bool _isLoading = true;
   String? _error;
   StreamSubscription<List<Project>>? _sub;
+  String? _currentLeaderId; // Store current leader ID for validation
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -31,9 +32,19 @@ class ImpactOverviewViewModel extends ChangeNotifier {
       return;
     }
 
+    _currentLeaderId = user.uid; // Store leader ID for validation
+
     _sub = _dbService.streamLeaderAllProjects(user.uid).listen(
           (data) {
-        _projects = data;
+        // Additional validation: ensure all projects belong to the current leader
+        // This is a defensive check in case of data inconsistency
+        final filteredProjects = data.where((project) {
+          // Double-check that project.leaderId matches current leader
+          // (This should already be filtered by the database query, but we validate here too)
+          return project.leaderId == _currentLeaderId;
+        }).toList();
+
+        _projects = filteredProjects;
         _isLoading = false;
         notifyListeners();
       },
@@ -52,12 +63,13 @@ class ImpactOverviewViewModel extends ChangeNotifier {
   }
 
   // --- Top Metrics ---
+  // All calculations explicitly filter by current leader ID to ensure data integrity
 
   Iterable<Project> get _completedProjects =>
-      _projects.where((p) => p.status == 'completed');
+      _projects.where((p) => p.status == 'completed' && p.leaderId == _currentLeaderId);
 
   Iterable<Project> get _activeProjects =>
-      _projects.where((p) => p.status == 'active');
+      _projects.where((p) => p.status == 'active' && p.leaderId == _currentLeaderId);
 
   int get totalYouthParticipated {
     final ids = <String>{};
@@ -91,6 +103,8 @@ class ImpactOverviewViewModel extends ChangeNotifier {
       DateTime(_now.year, _now.month + 1, 1); // Dart handles month overflow
 
   Iterable<Project> get _completedThisMonth => _completedProjects.where((p) {
+    // Additional leader ID validation for monthly calculations
+    if (p.leaderId != _currentLeaderId) return false;
     final completedAt = p.completedAt;
     if (completedAt == null) return false;
     return !completedAt.isBefore(_startOfMonth) &&
@@ -98,6 +112,8 @@ class ImpactOverviewViewModel extends ChangeNotifier {
   });
 
   Iterable<Project> get _createdThisMonth => _projects.where((p) {
+    // Additional leader ID validation for monthly calculations
+    if (p.leaderId != _currentLeaderId) return false;
     final createdAt = p.createdAt;
     if (createdAt == null) return false;
     return !createdAt.isBefore(_startOfMonth) &&
@@ -146,13 +162,17 @@ class ImpactOverviewViewModel extends ChangeNotifier {
 
 
   // Community growth this month vs last month (baseline hard-coded)
+  // Community growth per project is capped at the number of youth participants
   int get communityGrowthThisMonth {
     int totalGrowth = 0;
     for (final p in _completedThisMonth) {
       if (p.initialPopulation != null && p.currentPopulation != null) {
         int growth = p.currentPopulation! - p.initialPopulation!;
-        debugPrint('Project: ${p.title}, Growth: $growth');
-        totalGrowth += growth;
+        final maxGrowth = p.activeParticipants.length; // Cap at youth participants
+        // Cap the growth to not exceed youth participants
+        final cappedGrowth = growth > maxGrowth ? maxGrowth : growth;
+        debugPrint('Project: ${p.title}, Growth: $growth (capped to $cappedGrowth, max: $maxGrowth)');
+        totalGrowth += cappedGrowth;
       }
     }
     debugPrint('Total community growth this month: $totalGrowth');
@@ -163,10 +183,24 @@ class ImpactOverviewViewModel extends ChangeNotifier {
   // Hard-coded last month growth baseline (for now)
   int get communityGrowthLastMonthBaseline => 50;
 
+  // Formula: (thisMonth - lastMonth) / lastMonth * 100
+  // Can be positive, negative, zero, or >= 100%
   double get communityGrowthThisMonthPercent {
-    final baseline = communityGrowthLastMonthBaseline;
-    if (baseline <= 0) return 0;
-    return (communityGrowthThisMonth / baseline) * 100;
+    final lastMonth = communityGrowthLastMonthBaseline;
+    final thisMonth = communityGrowthThisMonth;
+
+    // If last month is 0, we can't calculate percentage
+    if (lastMonth <= 0) {
+      // If this month also has 0, return 0%
+      if (thisMonth == 0) return 0;
+      // If this month has growth but last month was 0, return a high percentage (or could be 100%+)
+      return 100.0;
+    }
+
+    // Formula: (thisMonth - lastMonth) / lastMonth * 100
+    final percent = ((thisMonth - lastMonth) / lastMonth) * 100;
+    debugPrint('Community growth: $percent% (thisMonth: $thisMonth, lastMonth: $lastMonth)');
+    return percent;
   }
 }
 

@@ -25,7 +25,10 @@ class CompletedProjectDashboardViewModel extends ChangeNotifier {
 
   int? get communityGrowth {
     if (initialPopulation == null || currentPopulation == null) return null;
-    return currentPopulation! - initialPopulation!;
+    final growth = currentPopulation! - initialPopulation!;
+    final maxGrowth = youthParticipated; // Community growth cannot exceed number of youth participants
+    // Return the growth, but capped at the number of youth participants
+    return growth > maxGrowth ? maxGrowth : growth;
   }
 
   // --- Population Updates ---
@@ -36,6 +39,21 @@ class CompletedProjectDashboardViewModel extends ChangeNotifier {
         int? newCurrentPopulation,
       }) async {
     if (newInitialPopulation == null && newCurrentPopulation == null) return;
+
+    // Determine the final values (use existing if new value is null)
+    final finalInitial = newInitialPopulation ?? project.initialPopulation;
+    final finalCurrent = newCurrentPopulation ?? project.currentPopulation;
+
+    // Validate: Community growth (current - initial) must not exceed youth participants
+    if (finalInitial != null && finalCurrent != null) {
+      final growth = finalCurrent - finalInitial;
+      if (growth > youthParticipated) {
+        throw Exception(
+            "Community growth ($growth) cannot exceed the number of youth participants ($youthParticipated). "
+                "Please adjust the population values."
+        );
+      }
+    }
 
     if (newInitialPopulation != null) {
       project.initialPopulation = newInitialPopulation;
