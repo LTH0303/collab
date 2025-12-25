@@ -9,6 +9,7 @@ import '../../ViewModel/ProjectDetailsViewModel/project_details_view_model.dart'
 import '../../models/ProjectRepository/project_model.dart';
 import 'hired_youth_list_view.dart';
 import 'completed_project_page.dart';
+import 'leader_main_layout.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
   final Project project;
@@ -512,7 +513,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   Widget _buildProjectActions(ProjectDetailsViewModel viewModel, Project project) {
     final bool allMilestonesDone = viewModel.isProjectCompleted;
     final bool isStatusCompleted = project.status == 'completed';
-    final bool showForceClose = allMilestonesDone && !isStatusCompleted;
     final bool canGenerateImpact = allMilestonesDone && !isStatusCompleted;
 
     return Column(
@@ -521,76 +521,82 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         const Text("Project Actions", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
 
-        if (showForceClose)
-          Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8)),
-            child: Column(
-              children: [
-                const Text("All milestones are complete, but project is still active.", style: TextStyle(color: Colors.red, fontSize: 12)),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      if (project.id != null) {
-                        await viewModel.finalizeProject(project.id!);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Project Closed! Participants can now apply for new jobs.")));
-                        }
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    child: const Text("Close Project Now"),
-                  ),
-                ),
-              ],
+        // Only show "Generate Final Impact" button when all milestones are done but project is still active
+        if (canGenerateImpact)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                if (project.id == null) return;
+                await viewModel.finalizeProject(project.id!);
+
+                // Refresh project data after finalizing
+                final updatedProject = viewModel.project ?? project;
+
+                if (mounted) {
+                  // Navigate back to Projects section and switch to Completed tab
+                  // Pop back to the main layout (Projects tab)
+                  Navigator.popUntil(context, (route) {
+                    // Check if we're back at the main layout
+                    return route.isFirst || route.settings.name == '/leader';
+                  });
+
+                  // Navigate to leader main layout with Projects tab active and Completed sub-tab
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LeaderMainLayoutWithProjectsTab(
+                        initialSubTab: 2, // 2 = Completed tab
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.assessment),
+              label: const Text("Generate Final Impact"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2E7D32),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
             ),
           ),
 
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: canGenerateImpact
-                ? () async {
-              if (project.id == null) return;
-              await viewModel.finalizeProject(project.id!);
-              final nextProject = viewModel.project ?? project;
-
-              if (mounted) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CompletedProjectDashboardPage(project: nextProject),
-                  ),
-                );
-              }
-            }
-                : null,
-            icon: const Icon(Icons.assessment),
-            label: const Text("Generate Final Impact"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: canGenerateImpact ? const Color(0xFF2E7D32) : Colors.grey.shade300,
-              foregroundColor: canGenerateImpact ? Colors.white : Colors.grey.shade600,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-        ),
+        // "Recommend Next Project" button - always visible but disabled when not completed
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: (allMilestonesDone && isStatusCompleted)
+            onPressed: isStatusCompleted
                 ? () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Recommend Next Project - Coming Soon")));
+              // Navigate to AI Planner with project outcomes as resources
+              // Defensive check: ensure actualOutcomes and expectedOutcomes exist
+              final actualOutcomes = project.actualOutcomes ?? <String>[];
+              final expectedOutcomes = project.expectedOutcomes ?? <String>[];
+              final outcomes = actualOutcomes.isNotEmpty
+                  ? actualOutcomes
+                  : expectedOutcomes;
+              final resources = outcomes.isNotEmpty
+                  ? outcomes.join(', ')
+                  : "Project: ${project.title}, Skills: ${project.skills.join(', ')}";
+
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LeaderMainLayoutWithData(
+                    initialTab: 0, // AI Planner tab
+                    prefillResources: resources,
+                    prefillBudget: project.totalBudget,
+                  ),
+                ),
+              );
             }
                 : null,
             icon: const Icon(Icons.lightbulb_outline),
             label: const Text("Recommend Next Project"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: (allMilestonesDone && isStatusCompleted) ? const Color(0xFF2E7D32) : Colors.grey.shade300,
-              foregroundColor: (allMilestonesDone && isStatusCompleted) ? Colors.white : Colors.grey.shade600,
+              backgroundColor: isStatusCompleted ? const Color(0xFF2E7D32) : Colors.grey.shade300,
+              foregroundColor: isStatusCompleted ? Colors.white : Colors.grey.shade600,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),

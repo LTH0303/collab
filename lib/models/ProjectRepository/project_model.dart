@@ -19,6 +19,8 @@ class Project {
   List<String> activeParticipants; // List of User IDs
   int? initialPopulation; // Population at project start (for impact)
   int? currentPopulation; // Current population when project completed
+  List<String> expectedOutcomes; // Expected outcomes when project is created (AI-generated)
+  List<String> actualOutcomes; // Actual outcomes when project is completed (editable by leader)
   DateTime? completedAt; // When project was marked completed
   DateTime? createdAt; // When project was created
 
@@ -38,6 +40,8 @@ class Project {
     this.activeParticipants = const [],
     this.initialPopulation,
     this.currentPopulation,
+    this.expectedOutcomes = const [],
+    this.actualOutcomes = const [],
     this.completedAt,
     this.createdAt,
   });
@@ -58,6 +62,8 @@ class Project {
       activeParticipants: List<String>.from(json['active_participants'] ?? []),
       initialPopulation: json['initial_population'],
       currentPopulation: json['current_population'],
+      expectedOutcomes: List<String>.from(json['expected_outcomes'] ?? []),
+      actualOutcomes: List<String>.from(json['actual_outcomes'] ?? []),
       completedAt: json['completed_at'] != null
           ? DateTime.tryParse(json['completed_at'])
           : null,
@@ -85,6 +91,8 @@ class Project {
       'active_participants': activeParticipants,
       'initial_population': initialPopulation,
       'current_population': currentPopulation,
+      'expected_outcomes': expectedOutcomes,
+      'actual_outcomes': actualOutcomes,
       if (completedAt != null) 'completed_at': completedAt!.toIso8601String(),
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       'milestones': milestones.map((m) => m.toJson()).toList(),

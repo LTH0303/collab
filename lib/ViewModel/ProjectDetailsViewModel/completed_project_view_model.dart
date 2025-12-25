@@ -52,6 +52,12 @@ class CompletedProjectDashboardViewModel extends ChangeNotifier {
 
     notifyListeners();
   }
+
+  Future<void> saveActualOutcomes(String projectId, List<String> actualOutcomes) async {
+    project.actualOutcomes = actualOutcomes;
+    await _dbService.updateProjectOutcomes(projectId, actualOutcomes);
+    notifyListeners();
+  }
 }
 
 

@@ -15,6 +15,7 @@ class AIService {
       apiKey: apiKey,
       generationConfig: GenerationConfig(responseMimeType: 'application/json'),
     );
+    print("🔑 Using Gemini key: $apiKey");
   }
 
   Future<Project> generateProjectDraft(String resources, String budgetAmount) async {
@@ -60,6 +61,7 @@ class AIService {
         "required_skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4"],
         "participant_range": "e.g. 5-8 Youth",
         "starting_resources": ["Resource 1", "Resource 2"],
+        "expected_outcomes": ["Outcome 1 (e.g. 100kg organic vegetables)", "Outcome 2 (e.g. Compost fertilizer)", "Outcome 3 (e.g. Irrigation system)"],
         "address": "Full Address String",
         "milestones": [
           {
@@ -72,7 +74,12 @@ class AIService {
           }
         ]
       }
+      
+      IMPORTANT: The "expected_outcomes" field should list 3-5 concrete, measurable outcomes that this project will produce upon completion. 
+      Examples: "150kg organic vegetables", "Compost fertilizer production system", "Functional irrigation network", "Trained 8 youth in organic farming".
+      These outcomes will become resources for future projects.
     ''';
+    print("📝 Prompt length: ${prompt.length}");
 
     try {
       final response = await _model.generateContent([Content.text(prompt)]);

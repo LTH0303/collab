@@ -4,6 +4,7 @@ import '../../models/ProjectRepository/project_model.dart';
 import '../../ViewModel/ProjectDetailsViewModel/completed_project_view_model.dart';
 import '../../ViewModel/PlannerViewModel/planner_view_model.dart';
 import 'project_details_page.dart';
+import 'leader_main_layout.dart';
 
 class CompletedProjectDashboardContent extends StatefulWidget {
   final CompletedProjectDashboardViewModel viewModel;
@@ -92,6 +93,8 @@ class _CompletedProjectDashboardContentState extends State<CompletedProjectDashb
         const SizedBox(height: 20),
         _buildSkillsSection(widget.project),
         const SizedBox(height: 20),
+        _buildOutcomesSection(context, widget.project, widget.viewModel),
+        const SizedBox(height: 20),
         _buildProjectInfoSection(widget.project),
         const SizedBox(height: 24),
         _buildActionsSection(context, widget.project, widget.viewModel),
@@ -179,6 +182,146 @@ class _CompletedProjectDashboardContentState extends State<CompletedProjectDashb
     );
   }
 
+  Widget _buildOutcomesSection(BuildContext context, Project project, CompletedProjectDashboardViewModel viewModel) {
+    final outcomes = project.actualOutcomes.isNotEmpty ? project.actualOutcomes : project.expectedOutcomes;
+    final isActual = project.actualOutcomes.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              isActual ? "Actual Outcomes" : "Expected Outcomes",
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            if (project.status == 'completed')
+              TextButton.icon(
+                onPressed: () => _showOutcomesDialog(context, project, viewModel),
+                icon: const Icon(Icons.edit, size: 16),
+                label: const Text("Edit", style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF5C6BC0),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isActual ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E0), // Green for actual, Orange for expected
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isActual ? const Color(0xFFC8E6C9) : const Color(0xFFFFE0B2),
+            ),
+          ),
+          child: outcomes.isEmpty
+              ? const Text(
+            "No outcomes recorded",
+            style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+          )
+              : Column(
+            children: outcomes
+                .map((outcome) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    isActual ? Icons.check_circle : Icons.radio_button_unchecked,
+                    size: 16,
+                    color: isActual ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      outcome,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isActual ? const Color(0xFF2E7D32) : const Color(0xFFE65100),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ))
+                .toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showOutcomesDialog(BuildContext context, Project project, CompletedProjectDashboardViewModel viewModel) {
+    final outcomesController = TextEditingController(
+      text: project.actualOutcomes.isNotEmpty
+          ? project.actualOutcomes.join('\n')
+          : project.expectedOutcomes.join('\n'),
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Edit Actual Outcomes"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Enter actual outcomes achieved (one per line):",
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: outcomesController,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                hintText: "e.g., 150kg organic vegetables\nCompost fertilizer system\nTrained 8 youth",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final outcomes = outcomesController.text
+                  .split('\n')
+                  .where((line) => line.trim().isNotEmpty)
+                  .map((line) => line.trim())
+                  .toList();
+
+              if (project.id != null) {
+                await viewModel.saveActualOutcomes(project.id!, outcomes);
+              }
+
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Outcomes updated successfully!"),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5C6BC0)),
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProjectInfoSection(Project project) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -245,9 +388,26 @@ class _CompletedProjectDashboardContentState extends State<CompletedProjectDashb
         ),
         const SizedBox(height: 12),
         OutlinedButton(
-          onPressed: () async {
-            final resources = "Project: ${project.title}, Skills: ${project.skills.join(', ')}";
-            await plannerViewModel.generatePlan(resources, project.totalBudget);
+          onPressed: () {
+            // Navigate to AI Planner page with pre-filled data from completed project
+            final outcomes = project.actualOutcomes.isNotEmpty
+                ? project.actualOutcomes
+                : project.expectedOutcomes;
+            final resources = outcomes.isNotEmpty
+                ? outcomes.join(', ')
+                : "Project: ${project.title}, Skills: ${project.skills.join(', ')}";
+
+            // Navigate to LeaderMainLayout and switch to AI Planner tab
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LeaderMainLayoutWithData(
+                  initialTab: 0,
+                  prefillResources: resources,
+                  prefillBudget: project.totalBudget,
+                ),
+              ),
+            );
           },
           style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Color(0xFF5C6BC0)),
