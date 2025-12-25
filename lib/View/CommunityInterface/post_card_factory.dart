@@ -1,3 +1,5 @@
+// lib/View/CommunityInterface/post_card_factory.dart
+
 import 'package:flutter/material.dart';
 import '../../models/CommunityRepository/post_model.dart';
 
@@ -40,7 +42,7 @@ class ShowcasePostCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -114,21 +116,22 @@ class ShowcasePostCard extends StatelessWidget {
             child: Text(post.content, style: const TextStyle(fontSize: 14)),
           ),
 
-          // Footer (Likes/Comments) - SHARE BUTTON REMOVED
+          // Footer (Likes/Comments)
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
             child: Row(
               children: [
-                // LIKE BUTTON
+                // [UPDATED] LIKE BUTTON -> Now uses Thumbs Up style
                 InkWell(
                   onTap: () => onLike(post.id),
                   child: Row(
                     children: [
                       Icon(
-                        post.isLiked ? Icons.favorite : Icons.favorite_border,
+                        post.isLiked ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
                         size: 20,
-                        color: post.isLiked ? Colors.red : Colors.grey,
+                        // Update color: Blue for liked (matches StandardPost), Grey for unliked
+                        color: post.isLiked ? Colors.blue : Colors.grey,
                       ),
                       const SizedBox(width: 6),
                       Text("${post.likeCount} Likes", style: const TextStyle(color: Colors.grey)),
@@ -200,8 +203,6 @@ class StandardPostCard extends StatelessWidget {
                   Text(post.userRole, style: const TextStyle(fontSize: 10, color: Colors.grey)),
                 ],
               ),
-              const Spacer(),
-              const Icon(Icons.more_horiz, color: Colors.grey),
             ],
           ),
           const SizedBox(height: 12),
@@ -209,7 +210,7 @@ class StandardPostCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              // LIKE BUTTON
+              // LIKE BUTTON (Kept consistent)
               InkWell(
                 onTap: () => onLike(post.id),
                 borderRadius: BorderRadius.circular(4),
