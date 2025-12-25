@@ -323,6 +323,13 @@ class DatabaseService {
       if (allCompleted) {
         updateData['status'] = 'completed';
         updateData['completed_at'] = DateTime.now().toIso8601String();
+
+        // Copy expected outcomes to actual outcomes if actual is empty
+        List<String> expectedOutcomes = List<String>.from(data['expected_outcomes'] ?? []);
+        List<String> actualOutcomes = List<String>.from(data['actual_outcomes'] ?? []);
+        if (actualOutcomes.isEmpty && expectedOutcomes.isNotEmpty) {
+          updateData['actual_outcomes'] = expectedOutcomes;
+        }
       }
 
       await projectRef.update(updateData);
@@ -788,9 +795,28 @@ class DatabaseService {
   }
 
   Future<void> finalizeProject(String projectId) async {
-    await _db.collection('projects').doc(projectId).update({
+    final snapshot = await _db.collection('projects').doc(projectId).get();
+    if (!snapshot.exists) throw Exception("Project not found");
+
+    Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
+    Map<String, dynamic> updateData = {
       'status': 'completed',
       'completed_at': DateTime.now().toIso8601String(),
+    };
+
+    // Copy expected outcomes to actual outcomes if actual is empty
+    List<String> expectedOutcomes = List<String>.from(data['expected_outcomes'] ?? []);
+    List<String> actualOutcomes = List<String>.from(data['actual_outcomes'] ?? []);
+    if (actualOutcomes.isEmpty && expectedOutcomes.isNotEmpty) {
+      updateData['actual_outcomes'] = expectedOutcomes;
+    }
+
+    await _db.collection('projects').doc(projectId).update(updateData);
+  }
+
+  Future<void> updateProjectOutcomes(String projectId, List<String> actualOutcomes) async {
+    await _db.collection('projects').doc(projectId).update({
+      'actual_outcomes': actualOutcomes,
     });
   }
 

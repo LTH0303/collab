@@ -7,10 +7,65 @@ import '../CommunityInterface/community_hub_page.dart'; // Import the new commun
 import 'impact_overview_page.dart';
 
 class LeaderMainLayout extends StatefulWidget {
-  const LeaderMainLayout({super.key});
+  final int? initialTab;
+  final int? initialSubTab; // For ProjectsSection sub-tabs (0=Draft, 1=Active, 2=Completed)
+  final String? prefillResources;
+  final String? prefillBudget;
+
+  const LeaderMainLayout({
+    super.key,
+    this.initialTab,
+    this.initialSubTab,
+    this.prefillResources,
+    this.prefillBudget,
+  });
 
   @override
   _LeaderMainLayoutState createState() => _LeaderMainLayoutState();
+}
+
+// Wrapper class to handle navigation with data
+class LeaderMainLayoutWithData extends StatelessWidget {
+  final int initialTab;
+  final int? initialSubTab;
+  final String? prefillResources;
+  final String? prefillBudget;
+
+  const LeaderMainLayoutWithData({
+    super.key,
+    required this.initialTab,
+    this.initialSubTab,
+    this.prefillResources,
+    this.prefillBudget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LeaderMainLayout(
+      initialTab: initialTab,
+      initialSubTab: initialSubTab,
+      prefillResources: prefillResources,
+      prefillBudget: prefillBudget,
+    );
+  }
+}
+
+// Wrapper class to navigate to Projects tab with specific sub-tab
+class LeaderMainLayoutWithProjectsTab extends StatelessWidget {
+  final int initialSubTab; // 0 = Draft, 1 = Active, 2 = Completed
+
+  const LeaderMainLayoutWithProjectsTab({
+    super.key,
+    required this.initialSubTab,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LeaderMainLayout(
+      initialTab: 1, // Projects tab
+      initialSubTab: initialSubTab,
+    );
+  }
 }
 
 class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerProviderStateMixin {
@@ -20,6 +75,13 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+
+    // Switch to specified tab if provided
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.initialTab != null) {
+        _tabController.animateTo(widget.initialTab!);
+      }
+    });
   }
 
   void switchToProjectsTab() {
@@ -76,8 +138,12 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
         controller: _tabController,
         physics: const NeverScrollableScrollPhysics(),
         children: [
-          AIPlannerSection(onGenerateSuccess: switchToProjectsTab),
-          const ProjectsSection(),
+          AIPlannerSection(
+            onGenerateSuccess: switchToProjectsTab,
+            prefillResources: widget.prefillResources,
+            prefillBudget: widget.prefillBudget,
+          ),
+          ProjectsSection(initialSubTab: widget.initialSubTab),
           const ImpactOverviewPage(),
           const CommunityHubPage(), // <--- Added here
         ],
@@ -89,15 +155,37 @@ class _LeaderMainLayoutState extends State<LeaderMainLayout> with SingleTickerPr
 // --- AI Planner Section ---
 class AIPlannerSection extends StatefulWidget {
   final VoidCallback onGenerateSuccess;
-  const AIPlannerSection({super.key, required this.onGenerateSuccess});
+  final String? prefillResources;
+  final String? prefillBudget;
+
+  const AIPlannerSection({
+    super.key,
+    required this.onGenerateSuccess,
+    this.prefillResources,
+    this.prefillBudget,
+  });
 
   @override
   State<AIPlannerSection> createState() => _AIPlannerSectionState();
 }
 
 class _AIPlannerSectionState extends State<AIPlannerSection> {
-  final TextEditingController _resourceController = TextEditingController();
-  final TextEditingController _budgetController = TextEditingController();
+  late final TextEditingController _resourceController;
+  late final TextEditingController _budgetController;
+
+  @override
+  void initState() {
+    super.initState();
+    _resourceController = TextEditingController(text: widget.prefillResources ?? '');
+    _budgetController = TextEditingController(text: widget.prefillBudget ?? '');
+  }
+
+  @override
+  void dispose() {
+    _resourceController.dispose();
+    _budgetController.dispose();
+    super.dispose();
+  }
 
   void _addQuickInput(String text) {
     if (_resourceController.text.isEmpty) {
