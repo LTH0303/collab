@@ -144,6 +144,60 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           ),
           const SizedBox(height: 24),
 
+          // --- NEW: Project Overview (Description & Skills) ---
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Project Overview",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  project.description.isNotEmpty ? project.description : "No description available.",
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Required Skills",
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                if (project.skills.isEmpty)
+                  Text("No specific skills listed.", style: TextStyle(color: Colors.grey.shade600))
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: project.skills.map((skill) {
+                      return Chip(
+                        label: Text(skill),
+                        labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF1565C0)),
+                        backgroundColor: const Color(0xFFE3F2FD),
+                        padding: EdgeInsets.zero,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
           // 2. Start Project Banner (IF NOT STARTED & NOT COMPLETED)
           if (!viewModel.isProjectStarted && isActive)
             Container(

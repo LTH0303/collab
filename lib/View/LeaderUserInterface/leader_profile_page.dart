@@ -31,7 +31,7 @@ class LeaderProfile {
       email: data['email'] ?? "ahmad.leader@gmail.com",
       phone: data['phone'] ?? "+60 12-345 6789",
       population: data['population'] ?? "1250",
-      yearsInOffice: data['years_in_office'] ?? "8",
+      yearsInOffice: data['years_in_office'] ?? "1",
     );
   }
 }

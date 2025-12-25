@@ -206,10 +206,20 @@ class ApplicantProfileView extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: () {
-                  appViewModel.rejectApplicant(application);
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Application Rejected")));
+                // UPDATED: Made async to ensure action completes before closing
+                onPressed: () async {
+                  await appViewModel.rejectApplicant(application);
+
+                  // Check if context is still valid before using it
+                  if (context.mounted) {
+                    Navigator.pop(context); // Close the command window
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Application Rejected"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.red,
@@ -222,10 +232,20 @@ class ApplicantProfileView extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: ElevatedButton(
-                onPressed: () {
-                  appViewModel.approveApplicant(application);
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Applicant Hired!")));
+                // UPDATED: Made async to ensure action completes before closing
+                onPressed: () async {
+                  await appViewModel.approveApplicant(application);
+
+                  // Check if context is still valid before using it
+                  if (context.mounted) {
+                    Navigator.pop(context); // Close the command window
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Applicant Hired!"),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
