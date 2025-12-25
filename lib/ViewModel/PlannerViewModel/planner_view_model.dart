@@ -42,6 +42,16 @@ class PlannerViewModel extends ChangeNotifier {
       // 1. Get AI Draft
       Project newDraft = await _repository.getAIRecommendation(resources, budget);
 
+      // --- GUARDRAIL CHECK ---
+      // 如果 AI 返回的是错误提示（Invalid Input 或 Error），我们不保存到数据库
+      // 而是直接抛出错误，让 UI 显示 Snackbar 提示用户重新输入
+      if (newDraft.title.contains("Invalid Input Detected") ||
+          newDraft.title.contains("AI Generation Error")) {
+        // 使用 AI 生成的 description 作为错误信息，因为它包含了具体原因
+        throw Exception(newDraft.description);
+      }
+      // -----------------------
+
       // 2. Set status to 'draft' ensuring it doesn't go live yet
       newDraft.status = 'draft';
 
