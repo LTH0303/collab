@@ -144,58 +144,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           ),
           const SizedBox(height: 24),
 
-          // --- NEW: Project Overview (Description & Skills) ---
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Project Overview",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  project.description.isNotEmpty ? project.description : "No description available.",
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  "Required Skills",
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                if (project.skills.isEmpty)
-                  Text("No specific skills listed.", style: TextStyle(color: Colors.grey.shade600))
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: project.skills.map((skill) {
-                      return Chip(
-                        label: Text(skill),
-                        labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF1565C0)),
-                        backgroundColor: const Color(0xFFE3F2FD),
-                        padding: EdgeInsets.zero,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      );
-                    }).toList(),
-                  ),
-              ],
-            ),
-          ),
+          // --- Expandable Project Overview ---
+          _buildExpandableOverview(project, isActive),
           const SizedBox(height: 24),
 
           // 2. Start Project Banner (IF NOT STARTED & NOT COMPLETED)
@@ -833,7 +783,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                   ? const Center(child: Text("No submissions yet"))
                   : ListView(
                 children: allSubmissions.map((submission) {
-                  return _buildSubmissionCard(viewModel, project.id!, milestoneIndex, submission, milestone.isCompleted);
+                  return _buildSubmissionCard(viewModel, project.id!, milestoneIndex, submission, milestone.isCompleted, milestone);
                 }).toList(),
               ),
             ),
@@ -843,9 +793,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
-  Widget _buildSubmissionCard(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, MilestoneSubmission submission, bool isMilestoneCompleted) {
+  Widget _buildSubmissionCard(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, MilestoneSubmission submission, bool isMilestoneCompleted, Milestone milestone) {
     Color statusColor;
     IconData statusIcon;
+    Color expenseColor = Colors.green; // Default for expenses
+
+    // Check if due date has passed
+    final bool isDueDatePassed = milestone.submissionDueDate != null &&
+        DateTime.now().toUtc().isAfter(milestone.submissionDueDate!.toUtc());
 
     switch (submission.status) {
       case 'pending':
@@ -859,9 +814,18 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       case 'rejected':
         statusColor = Colors.red;
         statusIcon = Icons.cancel;
+        expenseColor = Colors.red; // Rejected expenses are red
         break;
       case 'missed':
-        statusColor = Colors.red;
+      // For completed milestones: always red (definitely missed)
+      // For active milestones: red if due date passed, grey if not yet (waiting for submission)
+        if (isMilestoneCompleted) {
+          statusColor = Colors.red; // Completed milestone = definitely missed
+          expenseColor = Colors.red;
+        } else {
+          statusColor = isDueDatePassed ? Colors.red : Colors.grey; // Active: red if overdue, grey if waiting
+          expenseColor = isDueDatePassed ? Colors.red : Colors.grey;
+        }
         statusIcon = Icons.error_outline;
         break;
       default:
@@ -907,7 +871,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                 "RM ${submission.expenseClaimed}",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: submission.status == 'missed' ? Colors.red : Colors.green,
+                  color: expenseColor,
                 ),
               ),
             ],
@@ -1090,6 +1054,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
     );
   }
 
+  Widget _buildExpandableOverview(Project project, bool isActive) {
+    return _ExpandableOverviewCard(project: project, isActive: isActive);
+  }
+
   String _formatDate(DateTime date) {
     return "${date.day}/${date.month}/${date.year}";
   }
@@ -1114,6 +1082,201 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           },
         );
       },
+    );
+  }
+}
+
+class _ExpandableOverviewCard extends StatefulWidget {
+  final Project project;
+  final bool isActive;
+
+  const _ExpandableOverviewCard({
+    required this.project,
+    required this.isActive,
+  });
+
+  @override
+  State<_ExpandableOverviewCard> createState() => _ExpandableOverviewCardState();
+}
+
+class _ExpandableOverviewCardState extends State<_ExpandableOverviewCard> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header (always visible)
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isExpanded = !_isExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "Project Overview",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Icon(
+                    _isExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: Colors.grey,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Expandable content
+          if (_isExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildOverviewItem("Timeline", widget.project.timeline),
+                  const SizedBox(height: 16),
+                  _buildOverviewItem("Total Budget", "RM ${widget.project.totalBudget}"),
+                  const SizedBox(height: 16),
+                  // Required Skills - only for active projects, use bullet points
+                  if (widget.isActive) ...[
+                    _buildOverviewSectionTitle("Required Skills"),
+                    const SizedBox(height: 8),
+                    if (widget.project.skills.isEmpty)
+                      Text("No specific skills listed.", style: TextStyle(color: Colors.grey.shade600, fontSize: 14))
+                    else
+                      ...widget.project.skills.map((skill) => Padding(
+                        padding: const EdgeInsets.only(left: 16, bottom: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text("• ", style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
+                            Expanded(
+                              child: Text(skill, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
+                            ),
+                          ],
+                        ),
+                      )),
+                    const SizedBox(height: 16),
+                  ],
+                  _buildOverviewItem("Youth Participants Needed", widget.project.participantRange),
+                  const SizedBox(height: 16),
+                  _buildOverviewItem("Starting Materials", widget.project.startingResources.join(", ")),
+                  const SizedBox(height: 16),
+                  _buildOverviewItem("Address", widget.project.address, icon: Icons.location_on),
+                  const SizedBox(height: 16),
+                  _buildOverviewSectionTitle("Project Description"),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.project.description.isNotEmpty ? widget.project.description : "No description available.",
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade800, height: 1.5),
+                  ),
+                  // Expected Outcomes - only for active projects
+                  if (widget.isActive) ...[
+                    const SizedBox(height: 16),
+                    _buildOverviewSectionTitle("Expected Outcomes"),
+                    const SizedBox(height: 8),
+                    if ((widget.project.expectedOutcomes ?? []).isEmpty)
+                      Text(
+                        "No expected outcomes defined yet.",
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFC8E6C9)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: (widget.project.expectedOutcomes ?? [])
+                              .map((outcome) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.radio_button_unchecked,
+                                  size: 16,
+                                  color: Color(0xFF4CAF50),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    outcome,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ))
+                              .toList(),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewItem(String label, String value, {IconData? icon}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 16, color: Colors.grey),
+              const SizedBox(width: 4),
+            ],
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOverviewSectionTitle(String title) {
+    return Text(
+      title,
+      style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
     );
   }
 }

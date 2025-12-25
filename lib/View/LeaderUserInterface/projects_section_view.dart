@@ -692,7 +692,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.attach_money, size: 16, color: Colors.green),
+                      const Text("RM ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                       Text(project.totalBudget, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                       const SizedBox(width: 16),
                       const Icon(Icons.flag, size: 16, color: Colors.orange),
