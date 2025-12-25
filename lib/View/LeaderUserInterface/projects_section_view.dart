@@ -202,6 +202,9 @@ class _ProjectsSectionState extends State<ProjectsSection> {
 
   // UPDATED: Draft Page Builder uses project.id
   Widget _buildDraftPage(BuildContext context, PlannerViewModel viewModel, Project draft) {
+    // --- CHECK FOR ERROR PROJECT ---
+    bool isInvalidDraft = draft.title.contains("Invalid Input Detected") || draft.title.contains("AI Generation Error");
+
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -211,7 +214,7 @@ class _ProjectsSectionState extends State<ProjectsSection> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey.shade300),
+              border: Border.all(color: isInvalidDraft ? Colors.red.shade200 : Colors.grey.shade300),
               boxShadow: [
                 BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
               ],
@@ -223,13 +226,15 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF7986CB), Color(0xFF2E7D32)], // Purple to Greenish
+                      colors: isInvalidDraft
+                          ? [Colors.red.shade400, Colors.red.shade800]
+                          : [const Color(0xFF7986CB), const Color(0xFF2E7D32)], // Purple to Greenish
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,23 +243,26 @@ class _ProjectsSectionState extends State<ProjectsSection> {
                         children: [
                           _tag("Draft", Colors.white.withOpacity(0.2)),
                           const SizedBox(width: 8),
-                          // Only show AI tag if no leaderId (or logic you prefer), here simplified
-                          _tag("Work In Progress", Colors.white.withOpacity(0.2)),
+                          if (isInvalidDraft)
+                            _tag("Invalid Input", Colors.white.withOpacity(0.4))
+                          else
+                            _tag("Work In Progress", Colors.white.withOpacity(0.2)),
                           const Spacer(),
-                          // EDIT BUTTON ACTION
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.white),
-                            onPressed: () {
-                              if (draft.id != null) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => EditProjectPage(project: draft, projectId: draft.id!),
-                                  ),
-                                );
-                              }
-                            },
-                          ),
+                          // EDIT BUTTON ACTION (Disabled for invalid)
+                          if (!isInvalidDraft)
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.white),
+                              onPressed: () {
+                                if (draft.id != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => EditProjectPage(project: draft, projectId: draft.id!),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
                           // DELETE BUTTON ACTION
                           IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.white),
@@ -405,13 +413,33 @@ class _ProjectsSectionState extends State<ProjectsSection> {
 
           const SizedBox(height: 24),
 
-          // --- PUBLISH BUTTON ---
+          // --- PUBLISH BUTTON (CONDITIONAL) ---
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: SizedBox(
               width: double.infinity,
               height: 50,
-              child: ElevatedButton(
+              child: isInvalidDraft
+                  ? Container(
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.error_outline, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text(
+                      "Invalid Draft - Please Delete",
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              )
+                  : ElevatedButton(
                 onPressed: () async {
                   if (draft.id != null) {
                     await viewModel.publishDraft(draft.id!);
