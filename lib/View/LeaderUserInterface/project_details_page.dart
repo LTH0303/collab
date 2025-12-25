@@ -643,152 +643,189 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   }
 
   void _showSubmissionsDialog(ProjectDetailsViewModel viewModel, Project project, int milestoneIndex, Milestone milestone) async {
-    // CRITICAL: Ensure ALL participants are shown, even if they don't have submissions in Firestore
-    // This handles cases where old completed milestones were completed before the auto-missing feature was added
-    final allSubmissions = List<MilestoneSubmission>.from(milestone.submissions);
+    // ==========================================================
+    // 1. 准备阶段：预先获取“缺失参与者”的名字
+    //    (因为这是一个异步操作，不能放在 UI 渲染循环里)
+    // ==========================================================
+
+    // 获取当前已提交的用户 ID 集合
+    final initialSubmissions = milestone.submissions;
+    final submittedUserIds = initialSubmissions.map((s) => s.userId).toSet();
     final expectedParticipants = project.activeParticipants;
-    final submittedUserIds = allSubmissions.map((s) => s.userId).toSet();
 
-    print("📋 _showSubmissionsDialog: Expected ${expectedParticipants.length} participants, Found ${allSubmissions.length} submissions");
-    print("   Expected participants: $expectedParticipants");
-    print("   Submitted user IDs: $submittedUserIds");
+    // 准备一个 Map 来存名字，避免在弹窗里反复读取数据库
+    Map<String, String> missingUserNames = {};
 
-    // For each participant who doesn't have a submission, create a placeholder "missed" submission for display
+    print("📋 _showSubmissionsDialog: Preparing missing participants...");
+
     for (String participantId in expectedParticipants) {
       if (!submittedUserIds.contains(participantId)) {
-        print("   ➕ Creating placeholder for missing participant: $participantId");
-        // Fetch the actual user name from Firestore
         String userName = "Unknown Participant";
         try {
           final userDoc = await FirebaseFirestore.instance.collection('users').doc(participantId).get();
           if (userDoc.exists) {
             userName = userDoc.data()?['name'] ?? "Unknown Participant";
-            print("   ✅ Fetched name: $userName");
-          } else {
-            print("   ⚠️ User document not found for $participantId");
           }
         } catch (e) {
-          print("   ❌ Error fetching user name for display: $e");
+          print("Error fetching user name: $e");
         }
-
-        // Create a placeholder "missed" submission for display only (not saved to Firestore)
-        allSubmissions.add(MilestoneSubmission(
-          userId: participantId,
-          userName: userName,
-          expenseClaimed: "0",
-          proofImageUrl: "",
-          status: "missed",
-          rejectionReason: milestone.isCompleted
-              ? "System: No submission recorded (historical data)"
-              : "System: No submission before due date",
-          submittedAt: DateTime.now(),
-        ));
+        missingUserNames[participantId] = userName;
       }
     }
 
-    print("📊 Final submission count: ${allSubmissions.length} (should be ${expectedParticipants.length})");
+    if (!mounted) return; // 检查页面是否还存在
 
-    // Sort submissions: approved first, then by participant order
-    allSubmissions.sort((a, b) {
-      // Approved submissions first
-      bool aIsApproved = a.status == 'approved';
-      bool bIsApproved = b.status == 'approved';
-      if (aIsApproved && !bIsApproved) return -1;
-      if (!aIsApproved && bIsApproved) return 1;
-
-      // Then sort by participant order
-      int indexA = expectedParticipants.indexOf(a.userId);
-      int indexB = expectedParticipants.indexOf(b.userId);
-      if (indexA == -1) indexA = 999; // Put unknown participants at the end
-      if (indexB == -1) indexB = 999;
-      return indexA.compareTo(indexB);
-    });
-
+    // ==========================================================
+    // 2. 弹窗显示阶段
+    // ==========================================================
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Submissions Review", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                if (milestone.isCompleted)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      "Completed",
-                      style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Summary showing total participants
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: allSubmissions.length >= expectedParticipants.length
-                    ? Colors.green.shade50
-                    : Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: allSubmissions.length >= expectedParticipants.length
-                      ? Colors.green.shade200
-                      : Colors.orange.shade200,
-                  width: 1,
-                ),
+      // 【关键修复 1】包裹 Consumer，让弹窗能监听到 Approve/Reject 的变化
+      builder: (ctx) => Consumer<ProjectDetailsViewModel>(
+          builder: (context, vm, _) {
+
+            // 【关键修复 2】始终从 ViewModel 获取 *最新* 的项目数据
+            // 这样当我们在后台更新了状态，这里拿到的就是最新的 Milestone 对象
+            final currentProject = vm.project ?? project;
+            // 防止数组越界
+            final currentMilestone = (milestoneIndex < currentProject.milestones.length)
+                ? currentProject.milestones[milestoneIndex]
+                : milestone;
+
+            // 【关键修复 3】动态构建显示列表 = 最新的提交 + 之前查好的缺失名单
+            // 必须在这里合并，否则界面只会显示旧数据
+            final displayList = List<MilestoneSubmission>.from(currentMilestone.submissions);
+            final currentSubmittedIds = displayList.map((s) => s.userId).toSet();
+
+            // 把预先查好的缺失者加进去
+            for (String participantId in expectedParticipants) {
+              // 如果这个人还是没有提交（有可能在弹窗打开期间他提交了，虽然概率低）
+              if (!currentSubmittedIds.contains(participantId)) {
+                displayList.add(MilestoneSubmission(
+                  userId: participantId,
+                  userName: missingUserNames[participantId] ?? "Unknown", // 使用准备好的名字
+                  expenseClaimed: "0",
+                  proofImageUrl: "",
+                  status: "missed",
+                  rejectionReason: currentMilestone.isCompleted
+                      ? "System: No submission recorded (historical data)"
+                      : "System: No submission before due date",
+                  submittedAt: DateTime.now(),
+                ));
+              }
+            }
+
+            // 排序逻辑 (保持你的原样)
+            displayList.sort((a, b) {
+              // Approved 优先
+              bool aIsApproved = a.status == 'approved';
+              bool bIsApproved = b.status == 'approved';
+              if (aIsApproved && !bIsApproved) return -1;
+              if (!aIsApproved && bIsApproved) return 1;
+              // 其次按参与者顺序
+              int indexA = expectedParticipants.indexOf(a.userId);
+              int indexB = expectedParticipants.indexOf(b.userId);
+              if (indexA == -1) indexA = 999;
+              if (indexB == -1) indexB = 999;
+              return indexA.compareTo(indexB);
+            });
+
+            // ==========================================================
+            // 3. UI 构建
+            // ==========================================================
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.8,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              padding: const EdgeInsets.all(20),
+              child: Column(
                 children: [
-                  Icon(
-                    allSubmissions.length >= expectedParticipants.length
-                        ? Icons.check_circle
-                        : Icons.warning,
-                    size: 16,
-                    color: allSubmissions.length >= expectedParticipants.length
-                        ? Colors.green.shade700
-                        : Colors.orange.shade700,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("Submissions Review", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      if (currentMilestone.isCompleted)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            "Completed",
+                            style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    "Showing ${allSubmissions.length} / ${expectedParticipants.length} participants",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: allSubmissions.length >= expectedParticipants.length
-                          ? Colors.green.shade700
-                          : Colors.orange.shade700,
+                  const SizedBox(height: 12),
+                  // 统计横幅
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: displayList.length >= expectedParticipants.length
+                          ? Colors.green.shade50
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: displayList.length >= expectedParticipants.length
+                            ? Colors.green.shade200
+                            : Colors.orange.shade200,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          displayList.length >= expectedParticipants.length
+                              ? Icons.check_circle
+                              : Icons.warning,
+                          size: 16,
+                          color: displayList.length >= expectedParticipants.length
+                              ? Colors.green.shade700
+                              : Colors.orange.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          "Showing ${displayList.length} / ${expectedParticipants.length} participants",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: displayList.length >= expectedParticipants.length
+                                ? Colors.green.shade700
+                                : Colors.orange.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Expanded(
+                    child: displayList.isEmpty
+                        ? const Center(child: Text("No submissions yet"))
+                        : ListView(
+                      children: displayList.map((submission) {
+                        // 【关键修复 4】参数传递完全匹配你的新定义
+                        return _buildSubmissionCard(
+                            viewModel,       // 使用最新的 vm
+                            project.id!,
+                            milestoneIndex,
+                            submission,
+                            currentMilestone.isCompleted, // 第 5 个参数：是否完成
+                            currentMilestone              // 第 6 个参数：Milestone 对象
+                        );
+                      }).toList(),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: allSubmissions.isEmpty
-                  ? const Center(child: Text("No submissions yet"))
-                  : ListView(
-                children: allSubmissions.map((submission) {
-                  return _buildSubmissionCard(viewModel, project.id!, milestoneIndex, submission, milestone.isCompleted, milestone);
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
+            );
+          }
       ),
     );
   }
@@ -997,7 +1034,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   void _showApproveDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final commentController = TextEditingController();
-    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -1009,12 +1045,27 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           maxLines: 3,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+            // 点击取消也需要关闭弹窗
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
             onPressed: () async {
+              // 1. 【关键修复】先关闭弹窗！
+              // 这样用户就无法再次点击，也不会感觉界面“卡住”
               Navigator.pop(ctx);
+
+              // 2. 然后再执行耗时的后台操作
+              // 即使这里报错，弹窗也已经关掉了，不会影响体验
               await viewModel.approveSubmission(projectId, milestoneIndex, userId, comment: commentController.text);
-              messenger.showSnackBar(const SnackBar(content: Text("Submission approved!"), backgroundColor: Colors.green));
+
+              // 3. 操作完成后显示提示 (检查 mounted 以防止页面已销毁)
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Submission approved!"), backgroundColor: Colors.green),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text("Approve"),
@@ -1026,7 +1077,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
   void _showRejectDialog(ProjectDetailsViewModel viewModel, String projectId, int milestoneIndex, String userId) {
     final reasonController = TextEditingController();
-    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -1034,17 +1084,39 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         title: const Text("Reject Submission"),
         content: TextField(
           controller: reasonController,
-          decoration: const InputDecoration(hintText: "Enter rejection reason...", border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            hintText: "Enter rejection reason (Required)...",
+            border: OutlineInputBorder(),
+          ),
           maxLines: 3,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
             onPressed: () async {
-              if (reasonController.text.isEmpty) return;
+              // 验证：如果是空的，直接返回，不关弹窗
+              if (reasonController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Please enter a reason for rejection"), backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              // 1. 【关键修复】验证通过后，立即关闭弹窗
               Navigator.pop(ctx);
+
+              // 2. 后台执行拒绝逻辑
               await viewModel.rejectSubmission(projectId, milestoneIndex, userId, reasonController.text);
-              messenger.showSnackBar(const SnackBar(content: Text("Submission rejected"), backgroundColor: Colors.red));
+
+              // 3. 显示提示
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Submission rejected"), backgroundColor: Colors.red),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text("Reject"),
